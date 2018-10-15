@@ -1034,24 +1034,7 @@ class val LocalPartitionRouterBlueprint[S: State ref]
       state_steps, state_step_ids, consume hashed_node_routes,
       new_hash_partitions, _state_routing_ids)
 
-trait val StatelessPartitionRouter is Router
-  fun partition_id(): RoutingId
-  // // Total number of steps in partition
-  fun size(): USize
-  // Number of local steps in partition
-  fun local_size(): USize
-  fun update_boundaries(ob: box->Map[String, OutgoingBoundary]):
-    StatelessPartitionRouter
-  fun add_stateless_partition_routing_id(worker: WorkerName,
-    routing_id: RoutingId): StatelessPartitionRouter
-  fun remove_workers(leaving_workers: Array[String] val):
-    StatelessPartitionRouter
-  fun add_workers(joining_workers: Array[String] val):
-    StatelessPartitionRouter
-  fun blueprint(): StatelessPartitionRouterBlueprint
-  fun distribution_digest(): Map[String, Array[String] val] val
-
-class val LocalStatelessPartitionRouter is StatelessPartitionRouter
+class val StatelessPartitionRouter is Router
   let _partition_id: RoutingId
   let _worker_name: String
   let _workers: Array[WorkerName] val
@@ -1091,7 +1074,7 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
   fun local_size(): USize =>
     _steps_per_worker
 
-  fun partition_id(): RoutingId =>
+  fun partition_routing_id(): RoutingId =>
     _partition_id
 
   fun route[D: Any val](metric_name: String, pipeline_time_spent: U64, data: D,
@@ -1171,7 +1154,7 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
     for (w, pr) in _proxies.pairs() do
       new_proxies(w) = pr.update_boundary(ob)
     end
-    LocalStatelessPartitionRouter(_partition_id, _worker_name, _workers,
+    StatelessPartitionRouter(_partition_id, _worker_name, _workers,
       _local_partitions, _local_partition_ids,
       _stateless_partition_routing_ids, consume new_proxies,
       _steps_per_worker)
@@ -1184,7 +1167,7 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
       new_r_ids(w) = r_id
     end
     new_r_ids(worker) = routing_id
-    LocalStatelessPartitionRouter(_partition_id, _worker_name, _workers,
+    StatelessPartitionRouter(_partition_id, _worker_name, _workers,
       _local_partitions, _local_partition_ids, consume new_r_ids, _proxies,
       _steps_per_worker)
 
@@ -1208,7 +1191,7 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
         new_proxies(w) = pr
       end
     end
-    LocalStatelessPartitionRouter(_partition_id, _worker_name,
+    StatelessPartitionRouter(_partition_id, _worker_name,
       consume new_workers, _local_partitions, _local_partition_ids,
       _stateless_partition_routing_ids, consume new_proxies, _steps_per_worker)
 
@@ -1232,12 +1215,12 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
       //!@
       None
     end
-    LocalStatelessPartitionRouter(_partition_id, _worker_name,
+    StatelessPartitionRouter(_partition_id, _worker_name,
       consume new_workers, _local_partitions, _local_partition_ids,
       _stateless_partition_routing_ids, consume new_proxies, _steps_per_worker)
 
   fun blueprint(): StatelessPartitionRouterBlueprint =>
-    LocalStatelessPartitionRouterBlueprint(_partition_id, _workers,
+    StatelessPartitionRouterBlueprint(_partition_id, _workers,
       _stateless_partition_routing_ids, _steps_per_worker)
 
   fun distribution_digest(): Map[String, Array[String] val] val =>
@@ -1258,7 +1241,7 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
 
   fun eq(that: box->Router): Bool =>
     match that
-    | let o: box->LocalStatelessPartitionRouter =>
+    | let o: box->StatelessPartitionRouter =>
       //!@ We need to figure this out:
       true
     else
@@ -1268,16 +1251,7 @@ class val LocalStatelessPartitionRouter is StatelessPartitionRouter
   fun hash(): USize =>
     _partition_id.hash()
 
-trait val StatelessPartitionRouterBlueprint
-  fun build_router(worker_name: String,
-    local_partitions: Array[Step] val,
-    local_partition_ids: MapIs[Step, RoutingId] val,
-    local_stateless_partition_routing_id: RoutingId,
-    outgoing_boundaries: Map[String, OutgoingBoundary] val,
-    auth: AmbientAuth): StatelessPartitionRouter
-
-class val LocalStatelessPartitionRouterBlueprint
-  is StatelessPartitionRouterBlueprint
+class val StatelessPartitionRouterBlueprint
   let _partition_id: RoutingId
   let _workers: Array[WorkerName] val
   let _stateless_partition_routing_ids: Map[WorkerName, RoutingId] val
@@ -1318,7 +1292,7 @@ class val LocalStatelessPartitionRouterBlueprint
       end
     end
 
-    LocalStatelessPartitionRouter(_partition_id, worker_name, _workers,
+    StatelessPartitionRouter(_partition_id, worker_name, _workers,
       local_partitions, local_partition_ids,
       consume new_stateless_partition_routing_ids, consume proxies,
       _steps_per_worker)

@@ -531,7 +531,7 @@ actor RouterRegistry
   fun ref _distribute_stateless_partition_router(
     partition_router: StatelessPartitionRouter)
   =>
-    let partition_id = partition_router.partition_id()
+    let partition_id = partition_router.partition_routing_id()
 
     try
       if not _stateless_partition_router_subs.contains(partition_id) then
