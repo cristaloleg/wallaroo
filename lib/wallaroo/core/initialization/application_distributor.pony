@@ -167,7 +167,7 @@ actor ApplicationDistributor is Distributor
               None
             end
           let s_builder = StepBuilder(_app_name, _app_name, rb,
-            node.id, grouper, rb.is_stateful())
+            node.id, rb.routing_group(), grouper, rb.is_stateful())
           interm_graph.add_node(s_builder, node.id)
 
           for i_node in node.ins() do

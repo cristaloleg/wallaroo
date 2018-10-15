@@ -76,7 +76,7 @@ class val _StatelessPartitionRouterPId is _PipelineIdentifier
   fun eq(that: box->_PipelineIdentifier): Bool =>
     match that
     | let ir: _StatelessPartitionRouterPId =>
-      _router.partition_id() == ir._router.partition_id()
+      _router.partition_routing_id() == ir._router.partition_routing_id()
     else
       false
     end

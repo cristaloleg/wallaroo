@@ -191,7 +191,7 @@ actor KafkaSourceListener[In: Any val] is (SourceListener & KafkaClientManager)
         this)
     | let spr: StatelessPartitionRouter =>
       _router_registry.register_stateless_partition_router_subscriber(
-        spr.partition_id(), this)
+        spr.partition_routing_id(), this)
     end
 
     // create kafka config
@@ -265,7 +265,7 @@ actor KafkaSourceListener[In: Any val] is (SourceListener & KafkaClientManager)
                 pr.state_name(), source)
             | let spr: StatelessPartitionRouter =>
               _router_registry.register_stateless_partition_router_subscriber(
-                spr.partition_id(), source)
+                spr.partition_routing_id(), source)
             end
           else
             @printf[I32](("Error creating KafkaSource for topic: " + topic

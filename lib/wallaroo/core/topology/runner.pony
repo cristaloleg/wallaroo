@@ -46,9 +46,6 @@ interface Runner
     metrics_reporter: MetricsReporter ref): (Bool, U64)
   fun name(): String
   fun state_name(): StateName
-  // TODO: We no longer need to set the input type, so this and related code
-  // can be simplified.
-  fun clone_router_and_set_input_type(r: Router): Router
 
 interface SerializableStateRunner
   fun ref import_key_state(step: Step ref, s_name: StateName, key: Key,
@@ -68,27 +65,24 @@ trait val RunnerBuilder
     grouper: (Shuffle | GroupByKey | None) = None): Runner iso^
 
   fun name(): String
-  fun state_name(): StateName => ""
+  fun routing_group(): (StateName | RoutingId)
   fun parallelism(): USize
   fun is_prestate(): Bool => false
   fun is_stateful(): Bool
   fun is_multi(): Bool => false
-  fun clone_router_and_set_input_type(r: Router): Router
-  =>
-    r
 
 class val RunnerSequenceBuilder is RunnerBuilder
   let _runner_builders: Array[RunnerBuilder] val
-  var _state_name: String
+  let _routing_group: (StateName | RoutingId)
   let _parallelism: USize
 
   new val create(bs: Array[RunnerBuilder] val, parallelism': USize) =>
     _runner_builders = bs
-    _state_name =
+    _routing_group =
       try
-        _runner_builders(_runner_builders.size() - 1)?.state_name()
+        _runner_builders(0)?.routing_group()
       else
-        ""
+        0
       end
     _parallelism = parallelism'
 
@@ -122,7 +116,8 @@ class val RunnerSequenceBuilder is RunnerBuilder
     end
     n + "|"
 
-  fun state_name(): StateName => _state_name
+  fun routing_group(): (StateName | RoutingId) =>
+    _routing_group
   fun parallelism(): USize => _parallelism
   fun is_prestate(): Bool =>
     try
@@ -137,23 +132,17 @@ class val RunnerSequenceBuilder is RunnerBuilder
     else
       false
     end
-  fun clone_router_and_set_input_type(r: Router): Router
-  =>
-    try
-      _runner_builders(_runner_builders.size() - 1)?
-        .clone_router_and_set_input_type(r)
-    else
-      r
-    end
 
 class val ComputationRunnerBuilder[In: Any val, Out: Any val] is RunnerBuilder
   let _comp_builder: ComputationBuilder[In, Out]
+  let _routing_group: RoutingId
   let _parallelism: USize
 
   new val create(comp_builder: ComputationBuilder[In, Out],
-    parallelism': USize)
+    routing_group': RoutingId, parallelism': USize)
   =>
     _comp_builder = comp_builder
+    _routing_group = routing_group'
     _parallelism = parallelism'
 
   fun apply(event_log: EventLog,
@@ -170,7 +159,7 @@ class val ComputationRunnerBuilder[In: Any val, Out: Any val] is RunnerBuilder
     end
 
   fun name(): String => _comp_builder().name()
-  fun state_name(): StateName => ""
+  fun routing_group(): (StateName | RoutingId) => _routing_group
   fun parallelism(): USize => _parallelism
   fun is_stateful(): Bool => false
 
@@ -208,7 +197,7 @@ class val StateRunnerBuilder[In: Any val, Out: Any val, S: State ref] is
     end
 
   fun name(): String => _state_name + " StateRunnerBuilder"
-  fun state_name(): StateName => _state_name
+  fun routing_group(): (StateName | RoutingId) => _state_name
   fun parallelism(): USize => _parallelism
   fun is_stateful(): Bool => true
 
@@ -425,9 +414,6 @@ class ComputationRunner[In: Any val, Out: Any val]
 
   fun name(): String => _computation.name()
   fun state_name(): StateName => ""
-  fun clone_router_and_set_input_type(r: Router): Router
-  =>
-    _next.clone_router_and_set_input_type(r)
 
 class StateRunner[In: Any val, Out: Any val, S: State ref] is (Runner &
   RollbackableRunner & SerializableStateRunner)
@@ -586,8 +572,6 @@ class StateRunner[In: Any val, Out: Any val, S: State ref] is (Runner &
 
   fun name(): String => "State runner"
   fun state_name(): StateName => _state_name
-  fun clone_router_and_set_input_type(r: Router): Router =>
-    r
 
   fun ref import_key_state(step: Step ref, s_name: StateName, key: Key,
     s: ByteSeq val)
@@ -750,5 +734,3 @@ class iso RouterRunner
 
   fun name(): String => "Router runner"
   fun state_name(): StateName => ""
-  fun clone_router_and_set_input_type(r: Router): Router =>
-    r
