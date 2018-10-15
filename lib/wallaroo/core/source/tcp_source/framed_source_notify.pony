@@ -58,7 +58,7 @@ class TCPSourceNotify[In: Any val]
     _auth = auth
     _handler = handler
     _runner = runner_builder(event_log, auth, None, target_router)
-    _router = _runner.clone_router_and_set_input_type(router')
+    _router = router'
     _metrics_reporter = consume metrics_reporter
     _header_size = _handler.header_length()
 

@@ -124,7 +124,7 @@ actor ConnectorSourceListener[In: Any val] is SourceListener
         this)
     | let spr: StatelessPartitionRouter =>
       _router_registry.register_stateless_partition_router_subscriber(
-        spr.partition_id(), this)
+        spr.partition_routing_id(), this)
     end
 
     @printf[I32]((pipeline_name + " source attempting to listen on "
@@ -149,7 +149,7 @@ actor ConnectorSourceListener[In: Any val] is SourceListener
           pr.state_name(), source)
       | let spr: StatelessPartitionRouter =>
         _router_registry.register_stateless_partition_router_subscriber(
-          spr.partition_id(), source)
+          spr.partition_routing_id(), source)
       end
 
       _available_sources.push(source)

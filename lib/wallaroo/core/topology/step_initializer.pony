@@ -42,7 +42,7 @@ type StepInitializer is (StepBuilder | SourceData | EgressBuilder)
 class val StepBuilder
   let _app_name: String
   let _pipeline_name: String
-  let _state_name: String
+  let _routing_group: (StateName | RoutingId)
   let _runner_builder: RunnerBuilder
   let _id: RoutingId
   let _grouper: (Shuffle | GroupByKey | None)
@@ -51,38 +51,37 @@ class val StepBuilder
 
   new val create(app_name: String,
     pipeline_name': String, r: RunnerBuilder, id': RoutingId,
+    routing_group': (StateName | RoutingId),
     grouper: (Shuffle | GroupByKey | None) = None, is_stateful': Bool = false)
   =>
     _app_name = app_name
     _pipeline_name = pipeline_name'
     _runner_builder = r
-    _state_name = _runner_builder.state_name()
+    _routing_group = routing_group'
     _id = id'
     _grouper = grouper
     _is_stateful = is_stateful'
     _parallelism = r.parallelism()
 
   fun name(): String => _runner_builder.name()
-  fun state_name(): String => _state_name
+  fun routing_group(): (StateName | RoutingId | None) => _routing_group
   fun pipeline_name(): String => _pipeline_name
   fun id(): RoutingId => _id
   fun is_prestate(): Bool => _runner_builder.is_prestate()
   fun is_stateful(): Bool => _is_stateful
   fun is_partitioned(): Bool => false
   fun parallelism(): USize => _parallelism
-  //!@ Do we need this anymore?
-  fun clone_router_and_set_input_type(r: Router): Router =>
-    _runner_builder.clone_router_and_set_input_type(r)
 
-  fun apply(worker_name: WorkerName, next: Router, metrics_conn: MetricsSink,
-    event_log: EventLog, recovery_replayer: RecoveryReconnecter,
-    auth: AmbientAuth, outgoing_boundaries: Map[String, OutgoingBoundary] val,
+  fun apply(routing_id: RoutingId, worker_name: WorkerName, next: Router,
+    metrics_conn: MetricsSink, event_log: EventLog,
+    recovery_replayer: RecoveryReconnecter, auth: AmbientAuth,
+    outgoing_boundaries: Map[String, OutgoingBoundary] val,
     router_registry: RouterRegistry, router: Router = EmptyRouter): Step tag
   =>
     let runner = _runner_builder(where event_log = event_log, auth = auth,
       router = router, grouper = _grouper)
     let step = Step(auth, consume runner,
-      MetricsReporter(_app_name, worker_name, metrics_conn), _id,
+      MetricsReporter(_app_name, worker_name, metrics_conn), routing_id,
       event_log, recovery_replayer,
       outgoing_boundaries, router_registry, router)
     step.update_router(next)
@@ -92,7 +91,6 @@ class val SourceData
   let _id: RoutingId
   let _pipeline_name: String
   let _name: String
-  let _state_name: String
   let _runner_builder: RunnerBuilder
   let _grouper: (Shuffle | GroupByKey | None)
   let _source_listener_builder_builder: SourceListenerBuilderBuilder
@@ -106,26 +104,21 @@ class val SourceData
     _name = "| " + _pipeline_name + " source | " + r.name() + "|"
     _runner_builder = r
     _grouper = grouper
-    _state_name = _runner_builder.state_name()
     _source_listener_builder_builder = s
 
   fun runner_builder(): RunnerBuilder => _runner_builder
 
   fun name(): String => _name
-  fun state_name(): String => _state_name
+  fun routing_group(): (StateName | RoutingId | None) => None
   fun pipeline_name(): String => _pipeline_name
   fun id(): RoutingId => _id
   fun is_prestate(): Bool => _runner_builder.is_prestate()
   fun is_stateful(): Bool => false
   fun is_partitioned(): Bool => false
   fun parallelism(): USize => 1
-  fun clone_router_and_set_input_type(r: Router): Router
-  =>
-    _runner_builder.clone_router_and_set_input_type(r)
 
   fun source_listener_builder_builder(): SourceListenerBuilderBuilder =>
     _source_listener_builder_builder
-
 
 class val EgressBuilder
   let _name: String
@@ -153,15 +146,13 @@ class val EgressBuilder
     _sink_builder = sink_builder
 
   fun name(): String => _name
-  fun state_name(): String => ""
+  fun routing_group(): (StateName | RoutingId | None) => None
   fun pipeline_name(): String => _pipeline_name
   fun id(): RoutingId => _id
   fun is_prestate(): Bool => false
   fun is_stateful(): Bool => false
   fun is_partitioned(): Bool => false
   fun parallelism(): USize => 1
-  fun clone_router_and_set_input_type(r: Router,
-    dr: (Router | None) = None): Router => r
 
   fun target_address(): (ProxyAddress | KeyDistribution | None) =>
     _proxy_addr
@@ -233,5 +224,3 @@ class val EgressBuilder
 //   fun is_partitioned(): Bool => false
 //   //!@ This doesn't make sense
 //   fun parallelism(): USize => 1
-//   fun clone_router_and_set_input_type(r: Router,
-//     dr: (Router | None) = None): Router => r

@@ -112,6 +112,9 @@ class val LocalTopology
   // fun state_builders(): Map[StateName, StateSubpartitions] val =>
   //   _state_builders
 
+  fun routing_ids(): Map[U128, SetIs[RoutingId] val] val =>
+    _routing_ids
+
   fun update_state_map(state_name: StateName,
     state_map: Map[StateName, Router],
     metrics_conn: MetricsSink, event_log: EventLog,
@@ -868,966 +871,356 @@ actor LocalTopologyInitializer is LayoutInitializer
     checkpoint_target: (CheckpointId | None) = None,
     recovering_without_resilience: Bool = false)
   =>
-    @printf[I32]("!@ STARTING WORKER BUT INITIALIZE IS COMMENTED OUT\n".cstring())
-
-    //!@ TODO: Uncomment all this stuff below!
-
-    // _recovering =
-    //   match checkpoint_target
-    //   | let id: CheckpointId =>
-    //     _recovery.update_checkpoint_id(id)
-    //     true
-    //   else
-    //     false
-    //   end
-
-    // if _topology_initialized then
-    //   ifdef debug then
-    //     // Currently, recovery in a single worker cluster is a special case.
-    //     // We do not need to recover connections to other workers, so we
-    //     // initialize immediately in Startup. However, we eventually trigger
-    //     // code in connections.pony where initialize() is called again. For
-    //     // now, this code simply returns in that scenario to avoid double
-    //     // initialization.
-    //     Invariant(
-    //       try (_topology as LocalTopology).worker_names.size() == 1
-    //       else false end
-    //     )
-    //   end
-    //   return
-    // end
-
-    // if _is_joining then
-    //   _initialize_joining_worker()
-    //   return
-    // end
-
-    // @printf[I32](("------------------------------------------------------" +
-    //   "---\n").cstring())
-    // @printf[I32]("|v|v|v|Initializing Local Topology|v|v|v|\n\n".cstring())
-    // _cluster_initializer = cluster_initializer
-    // try
-    //   try
-    //     let local_topology_file = FilePath(_auth, _local_topology_file)?
-    //     if local_topology_file.exists() then
-    //       //we are recovering an existing worker topology
-    //       let data = recover val
-    //         // TODO: We assume that all journal data is copied to local file system first
-    //         let file = File(local_topology_file)
-    //         file.read(file.size())
-    //       end
-    //       match Serialised.input(InputSerialisedAuth(_auth), data)(
-    //         DeserialiseAuth(_auth))?
-    //       | let t: LocalTopology val =>
-    //         _topology = t
-    //       else
-    //         @printf[I32]("Error restoring previous topology!".cstring())
-    //         Fail()
-    //       end
-    //     end
-    //   else
-    //     @printf[I32]("Error restoring previous topology!".cstring())
-    //     Fail()
-    //   end
-
-    //   match _topology
-    //   | let t: LocalTopology =>
-    //     let worker_count = t.worker_names.size()
-
-    //     if (worker_count > 1) and (_outgoing_boundaries.size() == 0) then
-    //       @printf[I32]("Outgoing boundaries not set up!\n".cstring())
-    //       error
-    //     end
-
-    //     for w in t.worker_names.values() do
-    //       _barrier_initiator.add_worker(w)
-    //       _checkpoint_initiator.add_worker(w)
-    //     end
-
-    //     _save_local_topology()
-    //     _save_worker_names()
-
-    //     // Determine local keys for all state collections
-    //     let local_keys: Map[StateName, SetIs[Key] val] val =
-    //       if not _recovering then
-    //         let lks = recover iso Map[StateName, SetIs[Key] val] end
-    //         for (s_name, subp) in t.state_builders().pairs() do
-    //           lks(s_name) = subp.initial_local_keys(_worker_name)
-    //         end
-    //         let lks_val = consume val lks
-
-    //         // Populate local keys file
-    //         for (s_name, keys) in lks_val.pairs() do
-    //           for k in keys.values() do
-    //             _local_keys_file.add_key(s_name, k, 1)
-    //           end
-    //         end
-
-    //         lks_val
-    //       else
-    //         @printf[I32]("Reading local keys from file.\n".cstring())
-    //         try
-    //           _local_keys_file.read_local_keys(
-    //             checkpoint_target as CheckpointId)
-    //         else
-    //           Fail()
-    //           recover val Map[StateName, SetIs[Key] val] end
-    //         end
-    //       end
-
-    //     if t.is_empty() then
-    //       @printf[I32]("----This worker has no steps----\n".cstring())
-    //     end
-
-    //     let graph = t.graph()
-
-    //     @printf[I32]("Creating graph:\n".cstring())
-    //     @printf[I32]((graph.string() + "\n").cstring())
-
-    //     // Make sure we only create shared state once and reuse it
-    //     let state_map: Map[StateName, Router] = state_map.create()
-
-    //     @printf[I32](("\nInitializing " + t.name() +
-    //       " application locally:\n\n").cstring())
-
-    //     // For passing into partition builders so they can add state steps
-    //     // to our data routes
-    //     let data_routes_ref = Map[U128, Consumer]
-
-    //     // Keep track of all Consumers by id so we can create a
-    //     // DataRouter for the data channel boundary
-    //     var data_routes = recover trn Map[U128, Consumer] end
-
-    //     // Update the step ids for all OutgoingBoundaries
-    //     if worker_count > 1 then
-    //       _connections.update_boundary_ids(t.boundary_ids())
-    //     end
-
-    //     // Keep track of routers to the steps we've built
-    //     let built_routers = Map[U128, Router]
-
-    //     // Keep track of all stateless partition routers we've built
-    //     let stateless_partition_routers = Map[U128, StatelessPartitionRouter]
-
-    //     let built_stateless_steps = recover trn Map[RoutingId, Consumer] end
-
-    //     let built_state_steps = Map[String, Array[Step] val]
-    //     let built_state_step_ids = Map[String, Map[RoutingId, Step] val]
-
-    //     // Keep track of routes we can actually use for messages arriving at
-    //     // state steps (this depends on the state steps' upstreams across
-    //     // pipelines). Map from state name to router.
-    //     let state_step_routers = Map[String, TargetIdRouter]
-
-    //     // If this worker has at least one Source, then we'll also need a
-    //     // a BarrierSource to ensure that checkpoint barriers always get to
-    //     // source targets (even if our local Sources pop out of existence
-    //     // for some reason, as when TCPSources disconnect).
-    //     var barrier_source: (BarrierSource | None) = None
-
-    //     /////////
-    //     // Initialize based on DAG
-    //     //
-    //     // Assumptions:
-    //     //   I. Acylic graph
-    //     /////////
-
-    //     let frontier = Array[DagNode[StepInitializer] val]
-
-    //     /////////
-    //     // 1. Find graph sinks and add to frontier queue.
-    //     //    We'll work our way backwards.
-    //     @printf[I32]("Adding sink nodes to frontier\n".cstring())
-
-    //     // Hold non_partitions until the end because we need to build state
-    //     // comp targets first. (Holding to the end means processing first,
-    //     // since we're pushing onto a stack). On the other hand, we
-    //     // put all source data nodes on the bottom of the stack since
-    //     // sources should be processed last.
-    //     let non_partitions = Array[DagNode[StepInitializer] val]
-    //     let source_data_nodes = Array[DagNode[StepInitializer] val]
-    //     for node in graph.nodes() do
-    //       match node.value
-    //       | let sd: SourceData =>
-    //         source_data_nodes.push(node)
-    //       else
-    //         if node.is_sink() and node.value.is_prestate() then
-    //           @printf[I32](("Adding " + node.value.name() +
-    //             " node to frontier\n").cstring())
-    //           frontier.push(node)
-    //         else
-    //           non_partitions.push(node)
-    //         end
-    //       end
-    //     end
-
-    //     for node in non_partitions.values() do
-    //       @printf[I32](("Adding " + node.value.name() + " node to frontier\n")
-    //         .cstring())
-    //       frontier.push(node)
-    //     end
-
-    //     for node in source_data_nodes.values() do
-    //       @printf[I32](("Adding " + node.value.name() +
-    //         " node to end of frontier\n").cstring())
-    //       frontier.unshift(node)
-    //     end
-
-    //     /////////
-    //     // 2. Loop: Check next frontier item for if all outgoing steps have
-    //     //          been created
-    //     //       if no, send to bottom of frontier stack.
-    //     //       if yes, add ins to frontier stack, then build the step
-    //     //         (connecting it to its out steps, which have already been
-    //     //         built)
-    //     // If there are no cycles (I), this will terminate
-    //     while frontier.size() > 0 do
-    //       let next_node =
-    //         try
-    //           frontier.pop()?
-    //         else
-    //           @printf[I32](("Graph frontier stack was empty when node was " +
-    //             "still expected\n").cstring())
-    //           error
-    //         end
-
-    //       if built_routers.contains(next_node.id) then
-    //         // We've already handled this node (probably because it's
-    //         // pre-state)
-    //         // TODO: I don't think this should ever happen.
-    //         @printf[I32](("We've already handled " + next_node.value.name() +
-    //           " with id " + next_node.id.string() + " so we're not handling " +
-    //           " it again\n").cstring())
-    //         continue
-    //       end
-
-    //       // We are only ready to build a node if all of its outputs
-    //       // have been built
-    //       if _is_ready_for_building(next_node, built_routers) then
-    //         @printf[I32](("Handling " + next_node.value.name() + " node\n")
-    //           .cstring())
-    //         let next_initializer: StepInitializer = next_node.value
-
-    //         // ...match kind of initializer and go from there...
-    //         match next_initializer
-    //         | let builder: StepBuilder =>
-    //         ///////////////
-    //         // STEP BUILDER
-    //         ///////////////
-    //           let next_id = builder.id()
-    //           @printf[I32](("Handling id " + next_id.string() + "\n")
-    //             .cstring())
-
-    //           if builder.is_prestate() then
-    //           ///////////////////
-    //           // PRESTATE BUILDER
-    //             @printf[I32](("----Spinning up " + builder.name() + "----\n")
-    //               .cstring())
-
-    //             ////
-    //             // Create the state partition if it doesn't exist
-    //             if builder.state_name() != "" then
-    //               try
-    //                 let state_name = builder.state_name()
-    //                 state_step_routers.insert_if_absent(state_name,
-    //                   StateStepRouter.from_boundaries(_worker_name,
-    //                     _outgoing_boundaries))?
-    //                 t.update_state_map(state_name, state_map,
-    //                   _metrics_conn, _event_log, local_keys,
-    //                   _recovery_replayer, _auth,
-    //                   _outgoing_boundaries, _initializables,
-    //                   data_routes_ref, built_state_steps,
-    //                   built_state_step_ids, _router_registry)?
-    //               else
-    //                 @printf[I32]("Failed to update state_map\n".cstring())
-    //                 error
-    //               end
-    //             end
-
-    //             let partition_router =
-    //               try
-    //                 builder.clone_router_and_set_input_type(
-    //                   state_map(builder.state_name())?)
-    //               else
-    //                 // Not a partition, so we need a direct target router
-    //                 @printf[I32](("No partition router found for " +
-    //                   builder.state_name() + "\n").cstring())
-    //                 error
-    //               end
-
-    //             let state_comp_target_router =
-    //               if builder.pre_state_target_ids().size() > 0 then
-    //                 let routers = recover iso Array[Router] end
-    //                 for id in builder.pre_state_target_ids().values() do
-    //                   try
-    //                     routers.push(builder.clone_router_and_set_input_type(
-    //                       built_routers(id)?))
-    //                   else
-    //                     @printf[I32]("No router found to prestate target\n"
-    //                       .cstring())
-    //                     error
-    //                   end
-    //                 end
-    //                 ifdef debug then
-    //                   Invariant(routers.size() > 0)
-    //                 end
-    //                 if routers.size() == 1 then
-    //                   routers(0)?
-    //                 else
-    //                   MultiRouter(consume routers)
-    //                 end
-    //               else
-    //                 // This prestate has no computation targets
-    //                 EmptyRouter
-    //               end
-
-    //             let next_step = builder(partition_router, _metrics_conn,
-    //               _event_log, _recovery_replayer, _auth, _outgoing_boundaries,
-    //               _router_registry, state_comp_target_router)
-    //             _router_registry.register_partition_router_subscriber(
-    //               builder.state_name(), next_step)
-    //             _router_registry.register_producer(next_id, next_step)
-
-    //             data_routes(next_id) = next_step
-    //             _initializables.set(next_step)
-
-    //             built_stateless_steps(next_id) = next_step
-    //             let next_router = DirectRouter(next_id, next_step)
-    //             built_routers(next_id) = next_router
-    //           elseif not builder.is_stateful() then
-    //           //////////////////////////////////
-    //           // STATELESS, NON-PRESTATE BUILDER
-    //             @printf[I32](("----Spinning up " + builder.name() + "----\n")
-    //               .cstring())
-    //             let out_ids: Array[RoutingId] val =
-    //               try
-    //                 _get_output_node_ids(next_node)?
-    //               else
-    //                 @printf[I32]("Failed to get output node id\n".cstring())
-    //                 error
-    //               end
-
-    //             let out_router =
-    //               if out_ids.size() > 0 then
-    //                 let routers = recover iso Array[Router] end
-    //                 for id in out_ids.values() do
-    //                   try
-    //                     routers.push(builder.clone_router_and_set_input_type(
-    //                       built_routers(id)?))
-    //                   else
-    //                     @printf[I32]("No router found to target\n".cstring())
-    //                     error
-    //                   end
-    //                 end
-    //                 ifdef debug then
-    //                   Invariant(routers.size() > 0)
-    //                 end
-    //                 if routers.size() == 1 then
-    //                   routers(0)?
-    //                 else
-    //                   MultiRouter(consume routers)
-    //                 end
-    //               else
-    //                 // This prestate has no computation targets
-    //                 EmptyRouter
-    //               end
-
-    //             let next_step = builder(out_router, _metrics_conn, _event_log,
-    //               _recovery_replayer, _auth, _outgoing_boundaries,
-    //               _router_registry)
-
-    //             // ASSUMPTION: If an out_router is a MultiRouter, then none
-    //             // of its subrouters are partition routers. Put differently,
-    //             // we assume that splits never include partition routers.
-    //             match out_router
-    //             | let pr: StatelessPartitionRouter =>
-    //               _router_registry
-    //                 .register_stateless_partition_router_subscriber(
-    //                   pr.partition_id(), next_step)
-    //             end
-
-    //             data_routes(next_id) = next_step
-    //             _initializables.set(next_step)
-
-    //             built_stateless_steps(next_id) = next_step
-    //             let next_router = DirectRouter(next_id, next_step)
-    //             built_routers(next_id) = next_router
-    //           else
-    //           ////////////////////////////////
-    //           // NON-PARTITIONED STATE BUILDER
-    //             // Our step is stateful and non-partitioned, so we need to
-    //             // build both a state step and a prestate step
-
-    //             // First, we must check that all state computation targets
-    //             // have been built.  If they haven't, then we send this node
-    //             // to the back of the frontier queue.
-    //             var targets_ready = true
-    //             for in_node in next_node.ins() do
-    //               for id in in_node.value.pre_state_target_ids().values() do
-    //                 try
-    //                   built_routers(id)?
-    //                 else
-    //                   targets_ready = false
-    //                 end
-    //               end
-    //             end
-
-    //             if not targets_ready then
-    //               frontier.unshift(next_node)
-    //               continue
-    //             end
-
-    //             @printf[I32](("----Spinning up state for " + builder.name() +
-    //               "----\n").cstring())
-    //             let state_step = builder(EmptyRouter, _metrics_conn,
-    //               _event_log, _recovery_replayer, _auth, _outgoing_boundaries,
-    //               _router_registry)
-    //             data_routes(next_id) = state_step
-    //             _initializables.set(state_step)
-
-    //             let state_step_router = DirectRouter(next_id, state_step)
-    //             built_routers(next_id) = state_step_router
-
-    //             // Before a non-partitioned state builder, we should
-    //             // always have one or more non-partitioned pre-state builders.
-    //             // The only inputs coming into a state builder should be
-    //             // prestate builder, so we're going to build them all
-    //             for in_node in next_node.ins() do
-    //               match in_node.value
-    //               | let b: StepBuilder =>
-    //                 @printf[I32](("----Spinning up " + b.name() + "----\n")
-    //                   .cstring())
-
-    //                 let state_comp_target =
-    //                   if b.pre_state_target_ids().size() > 0 then
-    //                     let routers = recover iso Array[Router] end
-    //                     for id in b.pre_state_target_ids().values() do
-    //                       routers.push(built_routers(id)?)
-    //                     else
-    //                       @printf[I32](("Prestate comp target not built! We " +
-    //                         "should have already caught this\n").cstring())
-    //                       error
-    //                     end
-    //                     ifdef debug then
-    //                       Invariant(routers.size() > 0)
-    //                     end
-    //                     if routers.size() == 1 then
-    //                       routers(0)?
-    //                     else
-    //                       MultiRouter(consume routers)
-    //                     end
-    //                   else
-    //                     @printf[I32](("There is no prestate comp target. " +
-    //                       "using an EmptyRouter\n").cstring())
-    //                     EmptyRouter
-    //                   end
-
-    //                 let pre_state_step = b(state_step_router, _metrics_conn,
-    //                   _event_log, _recovery_replayer, _auth,
-    //                   _outgoing_boundaries, _router_registry,
-    //                   state_comp_target)
-    //                 _router_registry.register_producer(b.id(), pre_state_step)
-    //                 data_routes(b.id()) = pre_state_step
-    //                 _initializables.set(pre_state_step)
-
-    //                 built_stateless_steps(b.id()) = pre_state_step
-    //                 let pre_state_router = DirectRouter(b.id(), pre_state_step)
-    //                 built_routers(b.id()) = pre_state_router
-
-    //                 let state_name = b.state_name()
-    //                 if state_name == "" then
-    //                   Fail()
-    //                 else
-    //                   try
-    //                     var ssr = state_step_routers(state_name)?
-    //                     match state_comp_target
-    //                     | let spr: StatelessPartitionRouter =>
-    //                       ssr = ssr.update_stateless_partition_router(
-    //                         spr.partition_id(), spr)
-    //                     else
-    //                       for (r_id, c) in state_comp_target.routes().pairs()
-    //                       do
-    //                         ssr = ssr.add_consumer(r_id, c)
-    //                       end
-    //                     end
-    //                     state_step_routers(state_name) = ssr
-    //                   else
-    //                     Fail()
-    //                   end
-    //                 end
-
-    //                 // Add ins to this prestate node to the frontier
-    //                 for in_in_node in in_node.ins() do
-    //                   if not built_routers.contains(in_in_node.id) then
-    //                     frontier.push(in_in_node)
-    //                   end
-    //                 end
-
-    //                 @printf[I32](("Finished handling " + in_node.value.name() +
-    //                   " node\n").cstring())
-    //               else
-    //                 @printf[I32](("State steps should only have prestate " +
-    //                   "predecessors!\n").cstring())
-    //                 error
-    //               end
-    //             end
-    //           end
-    //         | let egress_builder: EgressBuilder =>
-    //         ////////////////////////////////////
-    //         // EGRESS BUILDER (Sink or Boundary)
-    //         ////////////////////////////////////
-    //           let next_id = egress_builder.id()
-    //           if not built_routers.contains(next_id) then
-    //             let sink_reporter = MetricsReporter(t.name(),
-    //               t.worker_name(), _metrics_conn)
-
-    //             // Create a sink or OutgoingBoundary proxy. If the latter,
-    //             // egress_builder finds it from _outgoing_boundaries
-    //             let sink =
-    //               try
-    //                 egress_builder(_worker_name, consume sink_reporter,
-    //                   _event_log, _recovering, _barrier_initiator,
-    //                   _checkpoint_initiator, _env, _auth, _outgoing_boundaries)?
-    //               else
-    //                 @printf[I32]("Failed to build sink from egress_builder\n"
-    //                   .cstring())
-    //                 error
-    //               end
-
-    //             match sink
-    //             | let d: DisposableActor =>
-    //               _connections.register_disposable(d)
-    //             else
-    //               @printf[I32](("All sinks and boundaries should be " +
-    //                 "disposable!\n").cstring())
-    //               Fail()
-    //             end
-
-    //             if not _initializables.contains(sink) then
-    //               _initializables.set(sink)
-    //             end
-
-    //             let sink_router =
-    //               match sink
-    //               | let ob: OutgoingBoundary =>
-    //                 match egress_builder.target_address()
-    //                 | let pa: ProxyAddress =>
-    //                   ProxyRouter(_worker_name, ob, pa, _auth)
-    //                 else
-    //                   @printf[I32]("No ProxyAddress for proxy!\n".cstring())
-    //                   error
-    //                 end
-    //               else
-    //                 built_stateless_steps(next_id) = sink
-    //                 DirectRouter(next_id, sink)
-    //               end
-
-    //             // Don't add to data_routes unless it's a local sink
-    //             match sink
-    //             | let ob: OutgoingBoundary => None
-    //             else
-    //               data_routes(next_id) = sink
-    //             end
-    //             built_routers(next_id) = sink_router
-    //           end
-    //         | let pre_stateless_data: PreStatelessData =>
-    //         //////////////////////
-    //         // PRE-STATELESS DATA
-    //         //////////////////////
-    //           try
-    //             let local_step_ids =
-    //               pre_stateless_data.worker_to_step_id(_worker_name)?
-
-    //             // Make sure all local steps for this stateless partition
-    //             // have already been initialized on this worker.
-    //             var ready = true
-    //             for id in local_step_ids.values() do
-    //               if not built_stateless_steps.contains(id) then
-    //                 ready = false
-    //               end
-    //             end
-
-    //             if ready then
-    //               // Populate partition routes with all local steps in
-    //               // the partition and proxy routers for any steps that
-    //               // exist on other workers.
-    //               let partition_routes =
-    //                 recover trn Map[U64, (Step | ProxyRouter)] end
-
-    //               for (p_id, step_id) in
-    //                 pre_stateless_data.partition_idx_to_step_id.pairs()
-    //               do
-    //                 if local_step_ids.contains(step_id) then
-    //                   match built_stateless_steps(step_id)?
-    //                   | let s: Step =>
-    //                     partition_routes(p_id) = s
-    //                   else
-    //                     @printf[I32](("We should only be creating stateless " +
-    //                       "partition routes to Steps!\n").cstring())
-    //                     Fail()
-    //                   end
-    //                 else
-    //                   let target_worker =
-    //                     pre_stateless_data.partition_idx_to_worker(p_id)?
-    //                   let proxy_address = ProxyAddress(target_worker, step_id)
-
-    //                   partition_routes(p_id) = ProxyRouter(target_worker,
-    //                     _outgoing_boundaries(target_worker)?, proxy_address,
-    //                     _auth)
-    //                 end
-    //               end
-
-    //               let stateless_partition_router =
-    //                 LocalStatelessPartitionRouter(next_node.id, _worker_name,
-    //                   pre_stateless_data.partition_idx_to_step_id,
-    //                   consume partition_routes,
-    //                   pre_stateless_data.steps_per_worker)
-
-    //               built_routers(next_node.id) = stateless_partition_router
-    //               stateless_partition_routers(next_node.id) =
-    //                 stateless_partition_router
-    //             else
-    //               // We need to wait until all local stateless partition steps
-    //               // are spun up on this worker before we can create the
-    //               // LocalStatelessPartitionRouter
-    //               frontier.unshift(next_node)
-    //             end
-    //           else
-    //             @printf[I32]("Error spinning up stateless partition\n"
-    //               .cstring())
-    //             Fail()
-    //           end
-    //         | let source_data: SourceData =>
-    //         /////////////////
-    //         // SOURCE DATA
-    //         /////////////////
-    //           let next_id = source_data.id()
-    //           let pipeline_name = source_data.pipeline_name()
-
-    //           ////
-    //           // Create the state partition if it doesn't exist
-    //           if source_data.state_name() != "" then
-    //             try
-    //               let state_name = source_data.state_name()
-    //               state_step_routers.insert_if_absent(state_name,
-    //                 StateStepRouter.from_boundaries(_worker_name,
-    //                   _outgoing_boundaries))?
-    //               t.update_state_map(state_name, state_map,
-    //                 _metrics_conn, _event_log, local_keys,
-    //                 _recovery_replayer, _auth,
-    //                 _outgoing_boundaries, _initializables,
-    //                 data_routes_ref, built_state_steps,
-    //                 built_state_step_ids, _router_registry)?
-    //             else
-    //               @printf[I32]("Failed to update state map\n".cstring())
-    //               error
-    //             end
-    //           end
-
-    //           let state_comp_target_router =
-    //             if source_data.is_prestate() then
-    //               if source_data.pre_state_target_ids().size() > 0 then
-    //                 let routers = recover iso Array[Router] end
-    //                 for id in source_data.pre_state_target_ids().values() do
-    //                   routers.push(built_routers(id)?)
-    //                 else
-    //                   @printf[I32](("Prestate comp target not built! We " +
-    //                     "should have already caught this\n").cstring())
-    //                   error
-    //                 end
-    //                 ifdef debug then
-    //                   Invariant(routers.size() > 0)
-    //                 end
-    //                 if routers.size() == 1 then
-    //                   routers(0)?
-    //                 else
-    //                   MultiRouter(consume routers)
-    //                 end
-    //               else
-    //                 @printf[I32](("There is no prestate comp target. " +
-    //                   "using an EmptyRouter\n").cstring())
-    //                 EmptyRouter
-    //               end
-    //             else
-    //               EmptyRouter
-    //             end
-
-    //           let out_router =
-    //             if source_data.state_name() == "" then
-    //               let out_ids = _get_output_node_ids(next_node)?
-
-    //               match out_ids.size()
-    //               | 0 => EmptyRouter
-    //               | 1 => built_routers(out_ids(0)?)?
-    //               else
-    //                 let routers = recover iso Array[Router] end
-    //                 for id in out_ids.values() do
-    //                   routers.push(built_routers(id)?)
-    //                 end
-    //                 MultiRouter(consume routers)
-    //               end
-    //             else
-    //               // Source has a prestate runner on it, so we have no
-    //               // direct target. We need a partition router. And we
-    //               // need to register a route to our state comp target on those
-    //               // state steps.
-    //               try
-    //                 source_data.clone_router_and_set_input_type(
-    //                   state_map(source_data.state_name())?)
-    //               else
-    //                 @printf[I32]("State doesn't exist for state computation.\n"
-    //                   .cstring())
-    //                 error
-    //               end
-    //             end
-
-    //           // If there is no BarrierSource, we need to create one, since
-    //           // this worker has at least one Source on it.
-    //           if barrier_source is None then
-    //             let b_source = BarrierSource(t.barrier_source_id,
-    //               _router_registry, _event_log)
-    //             _barrier_initiator.register_barrier_source(b_source)
-    //             barrier_source = b_source
-    //           end
-    //           try
-    //             (barrier_source as BarrierSource).register_pipeline(
-    //               pipeline_name, out_router)
-    //           else
-    //             Unreachable()
-    //           end
-
-    //           let source_reporter = MetricsReporter(t.name(), t.worker_name(),
-    //             _metrics_conn)
-
-    //           let listen_auth = TCPListenAuth(_auth)
-    //           @printf[I32](("----Creating source for " + pipeline_name +
-    //             " pipeline with " + source_data.name() + "----\n").cstring())
-
-    //           // Set up SourceListener builders
-    //           sl_builders.push(source_data.source_listener_builder_builder()(
-    //             t.worker_name(), pipeline_name, source_data.runner_builder(),
-    //             source_data.grouper(), out_router, _metrics_conn,
-    //             consume source_reporter, _router_registry,
-    //             _outgoing_boundary_builders, _event_log, _auth, this,
-    //             _recovering))
-
-    //           // Nothing connects to a source via an in edge locally,
-    //           // so this just marks that we've built this one
-    //           built_routers(next_id) = EmptyRouter
-    //         end
-
-    //         // Add all the nodes with incoming edges to next_node to the
-    //         // frontier
-    //         for in_node in next_node.ins() do
-    //           if not built_routers.contains(in_node.id) then
-    //             frontier.push(in_node)
-    //           end
-    //         end
-
-    //         @printf[I32](("Finished handling " + next_node.value.name() +
-    //           " node\n").cstring())
-    //       else
-    //         frontier.unshift(next_node)
-    //       end
-    //     end
-
-    //     //////////////
-    //     // Create ProxyRouters to all non-state steps in the
-    //     // topology that we haven't yet created routers to
-    //     for (tid, target) in t.step_map().pairs() do
-    //       if not built_routers.contains(tid) then
-    //         match target
-    //         | let pa: ProxyAddress val =>
-    //           if pa.worker != _worker_name then
-    //             built_routers(tid) = ProxyRouter(pa.worker,
-    //               _outgoing_boundaries(pa.worker)?, pa, _auth)
-    //           end
-    //         end
-    //       end
-    //     end
-
-    //     /////
-    //     // Register pre state target routes on corresponding state steps
-    //     for psd in t.pre_state_data().values() do
-    //       if psd.target_ids().size() > 0 then
-    //         // If the corresponding state has not been built yet, build it
-    //         // now
-    //         if psd.state_name() != "" then
-    //           try
-    //             let state_name = psd.state_name()
-    //             state_step_routers.insert_if_absent(state_name,
-    //               StateStepRouter.from_boundaries(_worker_name,
-    //                 _outgoing_boundaries))?
-    //             t.update_state_map(state_name, state_map,
-    //               _metrics_conn, _event_log, local_keys,
-    //               _recovery_replayer, _auth,
-    //               _outgoing_boundaries, _initializables,
-    //               data_routes_ref, built_state_steps,
-    //               built_state_step_ids, _router_registry)?
-    //           else
-    //             @printf[I32]("Failed to update state map\n".cstring())
-    //             error
-    //           end
-    //         end
-    //         let partition_router =
-    //           try
-    //             psd.clone_router_and_set_input_type(state_map(
-    //               psd.state_name())?)
-    //           else
-    //             @printf[I32](("PartitionRouter was not built for expected " +
-    //               "state partition.\n").cstring())
-    //             error
-    //           end
-    //         match partition_router
-    //         | let pr: PartitionRouter =>
-    //           _router_registry.set_partition_router(psd.state_name(), pr)
-    //           for tid in psd.target_ids().values() do
-    //             let target_router =
-    //               try
-    //                 built_routers(tid)?
-    //               else
-    //                 @printf[I32](("Failed to find built router for " +
-    //                   "target_router to %s\n").cstring(),
-    //                   tid.string().cstring())
-    //                 error
-    //               end
-
-    //             let state_name = psd.state_name()
-    //             if state_name == "" then
-    //               Fail()
-    //             else
-    //               try
-    //                 var ssr = state_step_routers(state_name)?
-    //                 match target_router
-    //                 | let spr: StatelessPartitionRouter =>
-    //                   ssr = ssr.update_stateless_partition_router(
-    //                     spr.partition_id(), spr)
-    //                 else
-    //                   for (r_id, c) in target_router.routes().pairs() do
-    //                     ssr = ssr.add_consumer(r_id, c)
-    //                   end
-    //                 end
-    //                 state_step_routers(state_name) = ssr
-    //               else
-    //                 Fail()
-    //               end
-    //             end
-    //             @printf[I32](("Registered routes on state steps for " +
-    //               psd.pre_state_name() + "\n").cstring())
-    //           end
-    //         else
-    //           @printf[I32](("Expected PartitionRouter but found something " +
-    //             "else!\n").cstring())
-    //           error
-    //         end
-    //       end
-    //     end
-    //     /////
-
-    //     for (id, s) in built_stateless_steps.pairs() do
-    //       match s
-    //       | let p: Producer =>
-    //         _router_registry.register_producer(id, p)
-    //       end
-    //     end
-
-    //     for (k, v) in data_routes_ref.pairs() do
-    //       data_routes(k) = v
-    //     end
-
-    //     let sendable_data_routes = consume val data_routes
-
-
-    //     let state_steps_iso = recover iso Map[StateName, Array[Step] val] end
-
-    //     for (k, v) in built_state_steps.pairs() do
-    //       state_steps_iso(k) = v
-    //     end
-
-    //     let sendable_state_steps = consume val state_steps_iso
-
-    //     let data_router_state_routing_ids =
-    //       recover iso Map[RoutingId, StateName] end
-
-    //     for (s_name, ws) in t.state_routing_ids.pairs() do
-    //       for (w, r_id) in ws.pairs() do
-    //         if w == _worker_name then
-    //           data_router_state_routing_ids(r_id) = s_name
-    //         end
-    //       end
-    //     end
-
-    //     let data_router = DataRouter(_worker_name, sendable_data_routes,
-    //       sendable_state_steps, consume data_router_state_routing_ids)
-    //     _router_registry.set_data_router(data_router)
-    //     _data_receivers.update_data_router(data_router)
-
-    //     let state_runner_builders = recover iso Map[String, RunnerBuilder] end
-
-    //     for (state_name, subpartition) in t.state_builders().pairs() do
-    //       state_runner_builders(state_name) = subpartition.runner_builder()
-    //     end
-
-    //     //!@ What do we need to remove related to this?
-    //     // _state_step_creator.initialize_routes_and_builders(this,
-    //     //   keyed_data_routes_ref.clone(), keyed_step_ids_ref.clone(),
-    //     //   _recovery_replayer, _outgoing_boundaries,
-    //     //   consume state_runner_builders)
-
-    //     if not _is_initializer then
-    //       // Inform the initializer that we're done initializing our local
-    //       // topology. If this is the initializer worker, we'll inform
-    //       // our ClusterInitializer actor once we've spun up the source
-    //       // listeners.
-    //       let topology_ready_msg =
-    //         try
-    //           ChannelMsgEncoder.topology_ready(_worker_name, _auth)?
-    //         else
-    //           @printf[I32]("ChannelMsgEncoder failed\n".cstring())
-    //           error
-    //         end
-
-    //       if not _recovering then
-    //         _connections.send_control("initializer", topology_ready_msg)
-    //       end
-    //     end
-
-    //     _router_registry.register_boundaries(_outgoing_boundaries,
-    //       _outgoing_boundary_builders)
-
-    //     let stateless_partition_routers_trn =
-    //       recover trn Map[U128, StatelessPartitionRouter] end
-    //     for (id, router) in stateless_partition_routers.pairs() do
-    //       stateless_partition_routers_trn(id) = router
-    //     end
-
-    //     for (id, pr) in stateless_partition_routers_trn.pairs() do
-    //       _router_registry.set_stateless_partition_router(id, pr)
-    //     end
-
-    //     _initializables.application_begin_reporting(this)
-
-    //     @printf[I32]("Local topology initialized\n".cstring())
-    //     _topology_initialized = true
-
-    //     if _initializables.size() == 0 then
-    //       @printf[I32](("Phases I-II skipped (this topology must only have " +
-    //         "sources.)\n").cstring())
-    //       _application_ready_to_work()
-    //     end
-    //   else
-    //     @printf[I32](("Local Topology Initializer: No local topology to " +
-    //       "initialize\n").cstring())
-    //   end
-
-    //   @printf[I32]("\n|^|^|^|Finished Initializing Local Topology|^|^|^|\n"
-    //     .cstring())
-    //   @printf[I32]("---------------------------------------------------------\n".cstring())
-
-    // else
-    //   @printf[I32]("Error initializing local topology\n".cstring())
-    //   Fail()
-    // end
+    @printf[I32]("!@ STARTING WORKER BUT INITIALIZE IS INCOMPLETE\n".cstring())
+
+    _recovering =
+      match checkpoint_target
+      | let id: CheckpointId =>
+        _recovery.update_checkpoint_id(id)
+        true
+      else
+        false
+      end
+
+    if _topology_initialized then
+      ifdef debug then
+        // Currently, recovery in a single worker cluster is a special case.
+        // We do not need to recover connections to other workers, so we
+        // initialize immediately in Startup. However, we eventually trigger
+        // code in connections.pony where initialize() is called again. For
+        // now, this code simply returns in that scenario to avoid double
+        // initialization.
+        Invariant(
+          try (_topology as LocalTopology).worker_names.size() == 1
+          else false end
+        )
+      end
+      return
+    end
+
+    if _is_joining then
+      _initialize_joining_worker()
+      return
+    end
+
+    @printf[I32](("------------------------------------------------------" +
+      "---\n").cstring())
+    @printf[I32]("|v|v|v|Initializing Local Topology|v|v|v|\n\n".cstring())
+    _cluster_initializer = cluster_initializer
+
+    try
+      // Check if we are recovering and need to read our local topology in
+      // from disk.
+      try
+        let local_topology_file = FilePath(_auth, _local_topology_file)?
+        if local_topology_file.exists() then
+          //we are recovering an existing worker topology
+          let data = recover val
+            // TODO: We assume that all journal data is copied to local file system first
+            let file = File(local_topology_file)
+            file.read(file.size())
+          end
+          match Serialised.input(InputSerialisedAuth(_auth), data)(
+            DeserialiseAuth(_auth))?
+          | let t: LocalTopology val =>
+            _topology = t
+          else
+            @printf[I32]("Error restoring previous topology!".cstring())
+            Fail()
+          end
+        end
+      else
+        @printf[I32]("Error restoring previous topology!".cstring())
+        Fail()
+      end
+
+      match _topology
+      | let t: LocalTopology =>
+        let worker_count = t.worker_names.size()
+
+        if (worker_count > 1) and (_outgoing_boundaries.size() == 0) then
+          @printf[I32]("Outgoing boundaries not set up!\n".cstring())
+          error
+        end
+
+        for w in t.worker_names.values() do
+          _barrier_initiator.add_worker(w)
+          _checkpoint_initiator.add_worker(w)
+        end
+
+        _save_local_topology()
+        _save_worker_names()
+
+        // Determine if we need to read in local keys for our state collections
+        let local_keys: Map[StateName, SetIs[Key] val] val =
+          if _recovering then
+            @printf[I32]("Reading local keys from file.\n".cstring())
+            try
+              _local_keys_file.read_local_keys(
+                checkpoint_target as CheckpointId)
+            else
+              Fail()
+              recover val Map[StateName, SetIs[Key] val] end
+            end
+          else
+            // We don't have any local keys yet since this is our initial
+            // startup.
+            recover iso Map[StateName, SetIs[Key] val] end
+          end
+
+        if t.is_empty() then
+          @printf[I32]("----This worker has no steps----\n".cstring())
+        end
+
+        let graph = t.graph()
+
+        @printf[I32]("Creating graph:\n".cstring())
+        @printf[I32]((graph.string() + "\n").cstring())
+
+        @printf[I32]("\nInitializing %s application locally:\n\n".cstring(),
+          t.name().cstring())
+
+        // Keep track of all Consumers by id so we can create a
+        // DataRouter for the data channel boundary
+        var data_routes = recover trn Map[U128, Consumer] end
+
+        // Keep track of routers to the steps we've built
+        let built_routers = Map[U128, Router]
+
+        // Keep track of state and stateless steps for registration with
+        // DataRouters.
+        let built_state_steps = Map[StateName, Array[Step] val]
+        let built_stateless_steps = Map[RoutingId, Array[Step] val]
+
+        // If this worker has at least one Source, then we'll also need a
+        // a BarrierSource to ensure that checkpoint barriers always get to
+        // source targets (even if our local Sources pop out of existence
+        // for some reason, as when TCPSources disconnect).
+        var barrier_source: (BarrierSource | None) = None
+
+        /////////
+        // Initialize based on DAG
+        //
+        // Assumptions:
+        //   I. Acylic graph
+        /////////
+
+        let nodes_to_initialize = Array[DagNode[StepInitializer] val]
+
+        /////////
+        // 1. Find graph sinks and add to nodes to initialize queue.
+        //    We'll work our way backwards.
+        //    We use a frontier queue to ensure that we add to the
+        //    initialization queue in waves, starting with all sinks, followed
+        //    by all inputs to those sinks, followed by all inputs to those
+        //    inputs, etc. until we get to the sources.
+        let frontier = Array[DagNode[StepInitializer] val]
+
+        @printf[I32]("Adding sink nodes to nodes to initialize\n".cstring())
+        for sink_node in graph.sinks() do
+          @printf[I32](("Adding %s node to nodes to initialize\n").cstring(),
+            sink_node.value.name().cstring())
+          nodes_to_initialize.push(sink_node)
+          frontier.push(sink_node)
+        end
+
+        while frontier.size() > 0 do
+          let next_node = frontier.shift()?
+          for i_node in next_node.ins() do
+            if not nodes_to_initialize.contains(i_node) then
+              @printf[I32](("Adding %s node to nodes to initialize\n")
+                .cstring(), i_node.value.name().cstring())
+              nodes_to_initialize.push(i_node)
+              frontier.push(i_node)
+            end
+          end
+        end
+
+        /////////
+        // 2. Loop: Check next node to initialize for if all outgoing steps
+        //          have been created.
+        //       if no, send to end of nodes to initialize queue.
+        //       if yes, add ins to nodes to initialize queue, then build the
+        //         step (connecting it to its out steps, which have already
+        //         been built)
+        // If there are no cycles (I), this will terminate
+        while nodes_to_initialize.size() > 0 do
+          let next_node =
+            try
+              nodes_to_initialize.shift()?
+            else
+              @printf[I32](("Graph nodes to initialize queue was empty when " +
+                "node was still expected\n").cstring())
+              error
+            end
+
+          if built_routers.contains(next_node.id) then
+            @printf[I32](("We've already handled %s with id %s\n").cstring(),
+              next_node.value.name().cstring(),
+              next_node.id.string().cstring())
+            Fail()
+          end
+
+          // We are only ready to build a node if all of its outputs
+          // have been built
+          if _is_ready_for_building(next_node, built_routers) then
+            @printf[I32](("Initializing " + next_node.value.name() + " node\n")
+              .cstring())
+
+            let next_initializer: StepInitializer = next_node.value
+
+            // ...match kind of initializer and go from there...
+            match next_initializer
+            | let builder: StepBuilder =>
+            ///////////////
+            // STEP BUILDER
+            ///////////////
+              // Each worker has its own execution ids assigned for a given
+              // node id. For example, if this is a parallel stateless
+              // computation, then there will be an execution id for each
+              // of the n steps that must be created given a parallelism of n.
+              let node_id = next_node.id
+              let execution_ids = t.routing_ids()(node_id)?
+              if builder.is_stateful() then
+                //////////////////////////////////
+                // STATE COMPUTATION
+
+                //!@ TODO: HANDLE THIS!
+                None
+              else
+                //////////////////////////////////
+                // STATELESS COMPUTATION
+                @printf[I32](("----Spinning up " + builder.name() + "----\n")
+                  .cstring())
+                let partition_routing_id: RoutingId =
+                  match builder.routing_group()
+                  | let ri: RoutingId => ri
+                  else
+                    Fail()
+                    0
+                  end
+
+                let out_ids: Array[RoutingId] val =
+                  try
+                    _get_output_node_ids(next_node)?
+                  else
+                    @printf[I32]("Failed to get output node ids\n".cstring())
+                    error
+                  end
+
+                // Determine router for outputs from this computation.
+                let out_router =
+                  if out_ids.size() > 0 then
+                    let routers = recover iso Array[Router] end
+                    for id in out_ids.values() do
+                      try
+                        routers.push(built_routers(id)?)
+                      else
+                        @printf[I32]("No router found to target\n".cstring())
+                        error
+                      end
+                    end
+                    ifdef debug then
+                      Invariant(routers.size() > 0)
+                    end
+                    if routers.size() == 1 then
+                      routers(0)?
+                    else
+                      MultiRouter(consume routers)
+                    end
+                  else
+                    // There should be at least one output for a stateless
+                    // computation.
+                    Fail()
+                    EmptyRouter
+                  end
+
+                /////////
+                // Create n steps given a parallelism of n. Then use these
+                // to create a StatelessPartitionRouter.
+                let router_stateless_steps_iso = recover iso Array[Step] end
+                let router_stateless_step_ids_iso =
+                  recover iso MapIs[Step, RoutingId] end
+                for r_id in execution_ids.values() do
+                  let next_step = builder(r_id, _worker_name, out_router,
+                    _metrics_conn, _event_log, _recovery_replayer, _auth,
+                    _outgoing_boundaries, _router_registry)
+
+                  router_stateless_steps_iso.push(next_step)
+                  router_stateless_step_ids_iso(next_step) = r_id
+                  data_routes(r_id) = next_step
+                  _initializables.set(next_step)
+
+                  // If our outputs are going to be routed through a
+                  // StatelessPartitionRouter, then we need to subscribe to
+                  // updates to that router.
+                  // ASSUMPTION: If an out_router is a MultiRouter, then none
+                  // of its subrouters are partition routers. Put differently,
+                  // we assume that splits never include partition routers.
+                  match out_router
+                  | let pr: StatelessPartitionRouter =>
+                    _router_registry
+                      .register_stateless_partition_router_subscriber(
+                        pr.partition_routing_id(), next_step)
+                  end
+                end
+
+                // Now that we've built all the individual local steps in this
+                // group, we need to record that we built this group and
+                // then create the StatelessPartitionRouter that routes
+                // messages to it.
+                let router_stateless_steps =
+                  consume val router_stateless_steps_iso
+                let router_stateless_step_ids =
+                  consume val router_stateless_step_ids_iso
+                built_stateless_steps(partition_routing_id) =
+                  router_stateless_steps
+
+                let proxies = recover iso Map[WorkerName, ProxyRouter] end
+                for (w, ob) in _outgoing_boundaries.pairs() do
+                  let w_routing_id =
+                    t.stateless_partition_routing_ids(partition_routing_id)?(
+                      w)?
+                  let proxy_address = ProxyAddress(w, w_routing_id)
+                  let proxy_router = ProxyRouter(_worker_name, ob,
+                    proxy_address, _auth)
+                  proxies(w) = proxy_router
+                end
+
+                // !@ Where do we get proxies from? Probably we update the code
+                // so we just pass in boundaries.
+                let next_router = StatelessPartitionRouter(
+                  partition_routing_id, _worker_name, t.worker_names,
+                  router_stateless_steps, router_stateless_step_ids,
+                  t.stateless_partition_routing_ids(partition_routing_id)?,
+                  consume proxies, execution_ids.size())
+
+                built_routers(node_id) = next_router
+              end
+            // !@ KEEP MATCHING!!!
+            // | ...
+            end
+          else
+            nodes_to_initialize.push(next_node)
+          end
+
+
+        //!@ Here ends the "nodes to initialize" while loop
+        end
+
+////
+// !@ More initializing...
+////
+
+
+      //!@ Here ends the _topology match
+      end
+    //!@ Here ends the initialization outer try block
+    else
+      @printf[I32]("Error initializing topology!\n".cstring())
+      Fail()
+    end
+//!@!@
 
 
     if recovering_without_resilience then

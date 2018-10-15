@@ -106,7 +106,7 @@ actor BarrierSource is Source
         this)
     | let spr: StatelessPartitionRouter =>
       _router_registry.register_stateless_partition_router_subscriber(
-        spr.partition_id(), this)
+        spr.partition_routing_id(), this)
     end
     _update_router(pipeline_name, router')
 
