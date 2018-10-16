@@ -119,7 +119,7 @@ actor TCPSourceListener[In: Any val] is SourceListener
     _fd = @pony_asio_event_fd(_event)
 
     match router
-    | let pr: PartitionRouter =>
+    | let pr: StatePartitionRouter =>
       _router_registry.register_partition_router_subscriber(pr.state_name(),
         this)
     | let spr: StatelessPartitionRouter =>
@@ -144,7 +144,7 @@ actor TCPSourceListener[In: Any val] is SourceListener
 
       _router_registry.register_source(source, source_id)
       match _router
-      | let pr: PartitionRouter =>
+      | let pr: StatePartitionRouter =>
         _router_registry.register_partition_router_subscriber(
           pr.state_name(), source)
       | let spr: StatelessPartitionRouter =>

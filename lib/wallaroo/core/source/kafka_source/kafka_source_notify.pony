@@ -147,11 +147,11 @@ class KafkaSourceNotify[In: Any val]
 
   fun ref update_boundaries(obs: box->Map[String, OutgoingBoundary]) =>
     match _router
-    | let p_router: PartitionRouter =>
+    | let p_router: StatePartitionRouter =>
       _router = p_router.update_boundaries(_auth, obs)
     else
       ifdef "trace" then
-        @printf[I32](("KafkaSourceNotify doesn't have PartitionRouter. " +
+        @printf[I32](("KafkaSourceNotify doesn't have StatePartitionRouter. " +
           "Updating boundaries is a noop for this kind of Source.\n").cstring())
       end
     end

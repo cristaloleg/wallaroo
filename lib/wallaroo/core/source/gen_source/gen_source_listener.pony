@@ -100,7 +100,7 @@ actor GenSourceListener[In: Any val] is SourceListener
     _generator = generator
 
     match router
-    | let pr: PartitionRouter =>
+    | let pr: StatePartitionRouter =>
       _router_registry.register_partition_router_subscriber(pr.state_name(),
         this)
     | let spr: StatelessPartitionRouter =>
@@ -126,7 +126,7 @@ actor GenSourceListener[In: Any val] is SourceListener
     source.mute(this)
     _router_registry.register_source(source, source_id)
     match _router
-    | let pr: PartitionRouter =>
+    | let pr: StatePartitionRouter =>
       _router_registry.register_partition_router_subscriber(
         pr.state_name(), source)
     | let spr: StatelessPartitionRouter =>
