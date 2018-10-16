@@ -120,6 +120,7 @@ class val SourceData
   fun source_listener_builder_builder(): SourceListenerBuilderBuilder =>
     _source_listener_builder_builder
 
+//!@
 class val EgressBuilder
   let _name: String
   let _pipeline_name: String
@@ -154,7 +155,8 @@ class val EgressBuilder
   fun is_partitioned(): Bool => false
   fun parallelism(): USize => 1
 
-  fun target_address(): (ProxyAddress | KeyDistribution | None) =>
+  //!@
+  fun target_address(): (ProxyAddress | None) =>
     _proxy_addr
 
   fun apply(worker_name: String, reporter: MetricsReporter ref,

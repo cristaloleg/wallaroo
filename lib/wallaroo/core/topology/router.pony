@@ -540,37 +540,7 @@ class val DataRouter is Equatable[DataRouter]
       consumer.report_status(code)
     end
 
-trait val PartitionRouter is Router
-  fun state_name(): String
-  fun receive_key_state(key: Key, state: ByteSeq val)
-  fun rebalance_steps_grow(auth: AmbientAuth,
-    target_workers: Array[(String, OutgoingBoundary)] val,
-    router_registry: RouterRegistry ref,
-    local_keys: SetIs[Key],
-    checkpoint_id: CheckpointId): (PartitionRouter, Bool)
-  fun rebalance_steps_shrink(
-    target_workers: Array[(String, OutgoingBoundary)] val,
-    leaving_workers: Array[String] val,
-    router_registry: RouterRegistry ref,
-    local_keys: SetIs[Key],
-    checkpoint_id: CheckpointId): Bool
-  fun recalculate_hash_partitions_for_join(auth: AmbientAuth,
-    joining_workers: Array[String] val,
-    outgoing_boundaries: Map[String, OutgoingBoundary]): PartitionRouter
-  fun recalculate_hash_partitions_for_shrink(
-    leaving_workers: Array[String] val): PartitionRouter
-  fun hash_partitions(): HashPartitions
-  fun update_hash_partitions(hp: HashPartitions): PartitionRouter
-  // Number of local steps in partition
-  fun local_size(): USize
-  fun update_boundaries(auth: AmbientAuth,
-    ob: box->Map[String, OutgoingBoundary]): PartitionRouter
-  fun add_state_routing_id(worker: WorkerName, routing_id: RoutingId):
-    PartitionRouter
-  fun blueprint(): PartitionRouterBlueprint
-  fun distribution_digest(): Map[WorkerName, Array[String] val] val
-
-class val LocalPartitionRouter[S: State ref] is PartitionRouter
+class val StatePartitionRouter is Router
   let _state_name: String
   let _worker_name: String
   let _state_steps: Array[Step] val
@@ -613,7 +583,7 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
     worker_ingress_ts: U64): (Bool, U64)
   =>
     ifdef "trace" then
-      @printf[I32]("Rcvd msg at PartitionRouter\n".cstring())
+      @printf[I32]("Rcvd msg at StatePartitionRouter\n".cstring())
     end
 
     let worker =
@@ -646,7 +616,7 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
         end
       else
         ifdef debug then
-          @printf[I32](("LocalPartitionRouter.route: No state step for " +
+          @printf[I32](("StatePartitionRouter.route: No state step for " +
             "key '%s'\n\n").cstring(), key.string().cstring())
         end
         Fail()
@@ -677,7 +647,7 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
       try
         m(_state_routing_ids(w)?) = hpr.target_boundary()
       else
-        @printf[I32](("LocalPartitionRouter: Failed to find state routing " +
+        @printf[I32](("StatePartitionRouter: Failed to find state routing " +
           "id for %s\n").cstring(), w.cstring())
         Fail()
       end
@@ -693,7 +663,7 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
     consume diff
 
   fun update_boundaries(auth: AmbientAuth,
-    ob: box->Map[String, OutgoingBoundary]): PartitionRouter
+    ob: box->Map[String, OutgoingBoundary]): StatePartitionRouter
   =>
     let new_hashed_node_routes = recover trn Map[String, HashedProxyRouter] end
 
@@ -704,7 +674,7 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
       new_hashed_node_routes(w) = HashedProxyRouter(w, b, _state_name, auth)
     end
 
-    LocalPartitionRouter[S](_state_name, _worker_name,
+    StatePartitionRouter(_state_name, _worker_name,
       _state_steps, _step_ids, consume new_hashed_node_routes,
       _hash_partitions, _state_routing_ids)
 
@@ -719,7 +689,7 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
 
   fun recalculate_hash_partitions_for_join(auth: AmbientAuth,
     joining_workers: Array[String] val,
-    outgoing_boundaries: Map[String, OutgoingBoundary]): PartitionRouter
+    outgoing_boundaries: Map[String, OutgoingBoundary]): StatePartitionRouter
   =>
     let new_hash_partitions =
       try
@@ -741,12 +711,12 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
       end
     end
 
-    LocalPartitionRouter[S](_state_name, _worker_name,
+    StatePartitionRouter(_state_name, _worker_name,
       _state_steps, _step_ids, consume new_hashed_node_routes,
       new_hash_partitions, _state_routing_ids)
 
   fun recalculate_hash_partitions_for_shrink(
-    leaving_workers: Array[String] val): PartitionRouter
+    leaving_workers: Array[String] val): StatePartitionRouter
   =>
     let new_hash_partitions =
       try
@@ -762,15 +732,15 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
       end
     end
 
-    LocalPartitionRouter[S](_state_name, _worker_name,
+    StatePartitionRouter(_state_name, _worker_name,
       _state_steps, _step_ids, consume new_hashed_node_routes,
       new_hash_partitions, _state_routing_ids)
 
   fun hash_partitions(): HashPartitions =>
     _hash_partitions
 
-  fun update_hash_partitions(hp: HashPartitions): PartitionRouter =>
-    LocalPartitionRouter[S](_state_name, _worker_name,
+  fun update_hash_partitions(hp: HashPartitions): StatePartitionRouter =>
+    StatePartitionRouter(_state_name, _worker_name,
       _state_steps, _step_ids, _hashed_node_routes, hp,
       _state_routing_ids)
 
@@ -778,7 +748,7 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
     target_workers: Array[(String, OutgoingBoundary)] val,
     router_registry: RouterRegistry ref,
     local_keys: SetIs[Key],
-    checkpoint_id: CheckpointId): (PartitionRouter, Bool)
+    checkpoint_id: CheckpointId): (StatePartitionRouter, Bool)
   =>
     """
     Begin migration of state steps known to this router that we determine
@@ -835,7 +805,7 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
       end
     end
 
-    // Update routes for the new PartitionRouter we will return
+    // Update routes for the new StatePartitionRouter we will return
     let new_hashed_node_routes = recover trn Map[String, HashedProxyRouter] end
 
     for (w, pr) in _hashed_node_routes.pairs() do
@@ -849,7 +819,7 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
     let had_keys_to_migrate = migrate_keys(router_registry,
       steps_to_migrate, target_workers.size(), checkpoint_id)
 
-    let new_router = LocalPartitionRouter[S](_state_name,
+    let new_router = StatePartitionRouter(_state_name,
       _worker_name, _state_steps, _step_ids, consume new_hashed_node_routes,
       new_hash_partitions, _state_routing_ids)
     (new_router, had_keys_to_migrate)
@@ -937,19 +907,19 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
     end
 
   fun add_state_routing_id(worker: WorkerName, routing_id: RoutingId):
-    PartitionRouter
+    StatePartitionRouter
   =>
     let new_state_routing_ids = recover iso Map[WorkerName, RoutingId] end
     for (w, r_id) in _state_routing_ids.pairs() do
       new_state_routing_ids(w) = r_id
     end
     new_state_routing_ids(worker) = routing_id
-    LocalPartitionRouter[S](_state_name, _worker_name, _state_steps,
+    StatePartitionRouter(_state_name, _worker_name, _state_steps,
       _step_ids, _hashed_node_routes, _hash_partitions,
       consume new_state_routing_ids)
 
-  fun blueprint(): PartitionRouterBlueprint =>
-    LocalPartitionRouterBlueprint[S](_state_name, _hash_partitions,
+  fun blueprint(): StatePartitionRouterBlueprint =>
+    StatePartitionRouterBlueprint(_state_name, _hash_partitions,
       _state_routing_ids)
 
   fun distribution_digest(): Map[WorkerName, Array[String] val] val =>
@@ -973,7 +943,7 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
 
   fun eq(that: box->Router): Bool =>
     match that
-    | let o: box->LocalPartitionRouter[S] =>
+    | let o: box->StatePartitionRouter =>
         MapTagEquality[RoutingId, Step](_step_ids, o._step_ids) and
         (_hash_partitions == o._hash_partitions)
     else
@@ -983,14 +953,7 @@ class val LocalPartitionRouter[S: State ref] is PartitionRouter
   fun hash(): USize =>
     _state_name.hash()
 
-trait val PartitionRouterBlueprint
-  fun build_router(worker_name: String, workers: Array[String] val,
-    state_steps: Array[Step] val, state_step_ids: Map[RoutingId, Step] val,
-    outgoing_boundaries: Map[WorkerName, OutgoingBoundary] val,
-    auth: AmbientAuth): PartitionRouter
-
-class val LocalPartitionRouterBlueprint[S: State ref]
-  is PartitionRouterBlueprint
+class val StatePartitionRouterBlueprint
   let _state_name: String
   let _hash_partitions: HashPartitions
   let _state_routing_ids: Map[WorkerName, RoutingId] val
@@ -1005,7 +968,7 @@ class val LocalPartitionRouterBlueprint[S: State ref]
   fun build_router(worker_name: String, workers: Array[String] val,
     state_steps: Array[Step] val, state_step_ids: Map[RoutingId, Step] val,
     outgoing_boundaries: Map[WorkerName, OutgoingBoundary] val,
-    auth: AmbientAuth): PartitionRouter
+    auth: AmbientAuth): StatePartitionRouter
   =>
     let hashed_node_routes = recover trn Map[WorkerName, HashedProxyRouter] end
     for (w, b) in outgoing_boundaries.pairs() do
@@ -1030,7 +993,7 @@ class val LocalPartitionRouterBlueprint[S: State ref]
         _hash_partitions
       end
 
-    LocalPartitionRouter[S](_state_name, worker_name,
+    StatePartitionRouter(_state_name, worker_name,
       state_steps, state_step_ids, consume hashed_node_routes,
       new_hash_partitions, _state_routing_ids)
 
