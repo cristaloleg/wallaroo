@@ -982,7 +982,7 @@ actor LocalTopologyInitializer is LayoutInitializer
         // Keep track of state and stateless steps for registration with
         // DataRouters.
         let built_state_steps = Map[StateName, Array[Step] val]
-        let built_stateless_steps = Map[RoutingId, Array[Step] val]
+        let built_stateless_steps = Map[RoutingId, Array[Step] box]
 
         // If this worker has at least one Source, then we'll also need a
         // a BarrierSource to ensure that checkpoint barriers always get to
@@ -1074,6 +1074,7 @@ actor LocalTopologyInitializer is LayoutInitializer
               // computation, then there will be an execution id for each
               // of the n steps that must be created given a parallelism of n.
               let node_id = next_node.id
+              @printf[I32]("!@ 1\n".cstring())
               let execution_ids = t.routing_ids()(node_id)?
 
               let out_ids: Array[RoutingId] val =
@@ -1100,6 +1101,7 @@ actor LocalTopologyInitializer is LayoutInitializer
                     Invariant(routers.size() > 0)
                   end
                   if routers.size() == 1 then
+                    @printf[I32]("!@ 2\n".cstring())
                     routers(0)?
                   else
                     MultiRouter(consume routers)
@@ -1157,6 +1159,7 @@ actor LocalTopologyInitializer is LayoutInitializer
                   proxies(w) = HashedProxyRouter(w, ob, state_name, _auth)
                 end
 
+                @printf[I32]("!@ 3\n".cstring())
                 let next_router = StatePartitionRouter(state_name,
                   _worker_name, router_state_steps, router_state_step_ids,
                   consume proxies, HashPartitions(t.worker_names),
@@ -1207,6 +1210,7 @@ actor LocalTopologyInitializer is LayoutInitializer
                 // layout.
                 let proxies = recover iso Map[WorkerName, ProxyRouter] end
                 for (w, ob) in _outgoing_boundaries.pairs() do
+                  @printf[I32]("!@ 4\n".cstring())
                   let w_routing_id =
                     t.stateless_partition_routing_ids(partition_routing_id)?(
                       w)?
@@ -1216,6 +1220,7 @@ actor LocalTopologyInitializer is LayoutInitializer
                   proxies(w) = proxy_router
                 end
 
+                @printf[I32]("!@ 5\n".cstring())
                 let next_router = StatelessPartitionRouter(
                   partition_routing_id, _worker_name, t.worker_names,
                   router_stateless_steps, router_stateless_step_ids,
@@ -1224,16 +1229,117 @@ actor LocalTopologyInitializer is LayoutInitializer
 
                 built_routers(node_id) = next_router
               end
-            // !@ KEEP MATCHING!!!
-            // | ...
+            | let egress_builder: EgressBuilder =>
+            ////////////////////////////////////
+            // EGRESS BUILDER (Sink)
+            ////////////////////////////////////
+              let next_id = egress_builder.id()
+
+              let sink_reporter = MetricsReporter(t.name(), _worker_name,
+                _metrics_conn)
+
+              // TODO: We should be passing in a RoutingId from our
+              // execution ids list, but right now the SinkBuilder
+              // infrastructure doesn't allow that. This means that currently
+              // the same sink_id is attached to sink replicas across workers.
+              let sink = egress_builder(_worker_name, consume sink_reporter,
+                _event_log, _recovering, _barrier_initiator,
+                _checkpoint_initiator, _env, _auth,
+                _outgoing_boundaries)
+
+              _connections.register_disposable(sink)
+              _initializables.set(sink)
+
+              //!@ I don't think we need this
+              // built_stateless_steps(next_id) = [sink]
+
+              data_routes(next_id) = sink
+
+              let sink_router = DirectRouter(next_id, sink)
+              built_routers(next_id) = sink_router
+            | let source_data: SourceData =>
+            /////////////////
+            // SOURCE DATA
+            /////////////////
+              let next_id = source_data.id()
+              let pipeline_name = source_data.pipeline_name()
+
+              let out_ids: Array[RoutingId] val =
+                try
+                  _get_output_node_ids(next_node)?
+                else
+                  @printf[I32]("Failed to get output node ids\n".cstring())
+                  error
+                end
+
+              // Determine router for outputs from this source.
+              let out_router =
+                if out_ids.size() > 0 then
+                  let routers = recover iso Array[Router] end
+                  for id in out_ids.values() do
+                    try
+                      routers.push(built_routers(id)?)
+                    else
+                      @printf[I32]("No router found to target\n".cstring())
+                      error
+                    end
+                  end
+                  ifdef debug then
+                    Invariant(routers.size() > 0)
+                  end
+                  if routers.size() == 1 then
+                    @printf[I32]("!@ source routers(0)?\n".cstring())
+                    routers(0)?
+                  else
+                    MultiRouter(consume routers)
+                  end
+                else
+                  // There should be at least one output for a stateless
+                  // computation.
+                  Fail()
+                  EmptyRouter
+                end
+
+              // If there is no BarrierSource, we need to create one, since
+              // this worker has at least one Source on it.
+              if barrier_source is None then
+                let b_source = BarrierSource(t.barrier_source_id,
+                  _router_registry, _event_log)
+                _barrier_initiator.register_barrier_source(b_source)
+                barrier_source = b_source
+              end
+              try
+                (barrier_source as BarrierSource).register_pipeline(
+                  pipeline_name, out_router)
+              else
+                Unreachable()
+              end
+
+              let source_reporter = MetricsReporter(t.name(), _worker_name,
+                _metrics_conn)
+
+              let listen_auth = TCPListenAuth(_auth)
+              @printf[I32](("----Creating source for " + pipeline_name +
+                " pipeline with " + source_data.name() + "----\n").cstring())
+
+              // Set up SourceListener builders
+              sl_builders.push(source_data.source_listener_builder_builder()(
+                t.worker_name(), pipeline_name, source_data.runner_builder(),
+                out_router, _metrics_conn, consume source_reporter,
+                _router_registry, _outgoing_boundary_builders, _event_log,
+                _auth, this, _recovering))
+
+              // Nothing connects to a source via an in edge locally,
+              // so this just marks that we've built this one
+              built_routers(next_id) = EmptyRouter
             end
+            @printf[I32](("Finished handling " + next_node.value.name() +
+              " node\n").cstring())
           else
             nodes_to_initialize.push(next_node)
           end
-
-
-        //!@ Here ends the "nodes to initialize" while loop
         end
+
 
 ////
 // !@ More initializing...
