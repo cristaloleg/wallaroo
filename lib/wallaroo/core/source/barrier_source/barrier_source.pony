@@ -78,7 +78,7 @@ actor BarrierSource is Source
     _source_id = source_id
     _router_registry = router_registry
     _event_log = event_log
-    _router_registry.register_producer(_source_id, this)
+    _router_registry.register_producer(this)
 
   be first_checkpoint_complete() =>
     None
@@ -284,7 +284,7 @@ actor BarrierSource is Source
   be dispose() =>
     if not _disposed then
       _unregister_all_outputs()
-      _router_registry.unregister_producer(_source_id)
+      _router_registry.unregister_producer(this)
       @printf[I32]("Shutting down BarrierSource\n".cstring())
       _disposed = true
     end
