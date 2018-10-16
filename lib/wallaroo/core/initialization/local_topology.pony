@@ -180,14 +180,6 @@ class val LocalTopology
       end
       new_worker_names.push(w)
 
-      let new_state_builders =
-        recover iso Map[StateName, StateSubpartitions] end
-
-      //!@
-      // for (state_name, state_subpartitions) in _state_builders.pairs() do
-      //   new_state_builders(state_name) = state_subpartitions.add_worker_name(w)
-      // end
-
       LocalTopology(_app_name, _worker_name, _graph, _routing_ids,
         consume new_worker_names, non_shrinkable,
         state_routing_ids, stateless_partition_routing_ids, barrier_source_id)
@@ -374,8 +366,8 @@ actor LocalTopologyInitializer is LayoutInitializer
 
   // Partition router blueprints
   var _partition_router_blueprints:
-    Map[StateName, PartitionRouterBlueprint] val =
-      recover Map[StateName, PartitionRouterBlueprint] end
+    Map[StateName, StatePartitionRouterBlueprint] val =
+      recover Map[StateName, StatePartitionRouterBlueprint] end
   var _stateless_partition_router_blueprints:
     Map[U128, StatelessPartitionRouterBlueprint] val =
       recover Map[U128, StatelessPartitionRouterBlueprint] end
@@ -731,7 +723,7 @@ actor LocalTopologyInitializer is LayoutInitializer
     _connections.quick_initialize_data_connections(this)
 
   be set_partition_router_blueprints(
-    pr_blueprints: Map[StateName, PartitionRouterBlueprint] val,
+    pr_blueprints: Map[StateName, StatePartitionRouterBlueprint] val,
     spr_blueprints: Map[U128, StatelessPartitionRouterBlueprint] val)
   =>
     _partition_router_blueprints = pr_blueprints
@@ -1075,23 +1067,105 @@ actor LocalTopologyInitializer is LayoutInitializer
             ///////////////
             // STEP BUILDER
             ///////////////
+              @printf[I32](("----Spinning up " + builder.name() + "----\n")
+                .cstring())
               // Each worker has its own execution ids assigned for a given
               // node id. For example, if this is a parallel stateless
               // computation, then there will be an execution id for each
               // of the n steps that must be created given a parallelism of n.
               let node_id = next_node.id
               let execution_ids = t.routing_ids()(node_id)?
+
+              let out_ids: Array[RoutingId] val =
+                try
+                  _get_output_node_ids(next_node)?
+                else
+                  @printf[I32]("Failed to get output node ids\n".cstring())
+                  error
+                end
+
+              // Determine router for outputs from this computation.
+              let out_router =
+                if out_ids.size() > 0 then
+                  let routers = recover iso Array[Router] end
+                  for id in out_ids.values() do
+                    try
+                      routers.push(built_routers(id)?)
+                    else
+                      @printf[I32]("No router found to target\n".cstring())
+                      error
+                    end
+                  end
+                  ifdef debug then
+                    Invariant(routers.size() > 0)
+                  end
+                  if routers.size() == 1 then
+                    routers(0)?
+                  else
+                    MultiRouter(consume routers)
+                  end
+                else
+                  // There should be at least one output for a stateless
+                  // computation.
+                  Fail()
+                  EmptyRouter
+                end
+
               if builder.is_stateful() then
                 //////////////////////////////////
                 // STATE COMPUTATION
+                let state_name =
+                  match builder.routing_group()
+                  | let sn: StateName => sn
+                  else
+                    Fail()
+                    ""
+                  end
 
-                //!@ TODO: HANDLE THIS!
-                None
+                /////////
+                // Create n steps given a parallelism of n. Then use these
+                // to create a StatePartitionRouter.
+                let step_group = create_step_group(execution_ids,
+                  builder, out_router)
+
+                // Now that we've built all the individual local steps in this
+                // group, we need to record that we built this group and
+                // then create the StatelessPartitionRouter that routes
+                // messages to it.
+                let router_state_steps_iso = recover iso Array[Step] end
+                let router_state_step_ids_iso =
+                  recover iso Map[RoutingId, Step] end
+                for (r_id, next_step) in step_group.pairs() do
+                  router_state_steps_iso.push(next_step)
+                  router_state_step_ids_iso(r_id) = next_step
+                  data_routes(r_id) = next_step
+                  _initializables.set(next_step)
+                end
+                let router_state_steps = consume val router_state_steps_iso
+                let router_state_step_ids =
+                  consume val router_state_step_ids_iso
+                built_state_steps(state_name) = router_state_steps
+
+                // Create HashedProxyRouters to other workers involved in this
+                // state computation step group.
+                // TODO: Currently, we simply include all workers in the
+                // cluster, but eventually we will need a more intelligent
+                // layout.
+                let proxies =
+                  recover iso Map[WorkerName, HashedProxyRouter] end
+                for (w, ob) in _outgoing_boundaries.pairs() do
+                  proxies(w) = HashedProxyRouter(w, ob, state_name, _auth)
+                end
+
+                let next_router = StatePartitionRouter(state_name,
+                  _worker_name, router_state_steps, router_state_step_ids,
+                  consume proxies, HashPartitions(t.worker_names),
+                  t.state_routing_ids(state_name)?)
+
+                built_routers(node_id) = next_router
               else
                 //////////////////////////////////
                 // STATELESS COMPUTATION
-                @printf[I32](("----Spinning up " + builder.name() + "----\n")
-                  .cstring())
                 let partition_routing_id: RoutingId =
                   match builder.routing_group()
                   | let ri: RoutingId => ri
@@ -1100,75 +1174,25 @@ actor LocalTopologyInitializer is LayoutInitializer
                     0
                   end
 
-                let out_ids: Array[RoutingId] val =
-                  try
-                    _get_output_node_ids(next_node)?
-                  else
-                    @printf[I32]("Failed to get output node ids\n".cstring())
-                    error
-                  end
-
-                // Determine router for outputs from this computation.
-                let out_router =
-                  if out_ids.size() > 0 then
-                    let routers = recover iso Array[Router] end
-                    for id in out_ids.values() do
-                      try
-                        routers.push(built_routers(id)?)
-                      else
-                        @printf[I32]("No router found to target\n".cstring())
-                        error
-                      end
-                    end
-                    ifdef debug then
-                      Invariant(routers.size() > 0)
-                    end
-                    if routers.size() == 1 then
-                      routers(0)?
-                    else
-                      MultiRouter(consume routers)
-                    end
-                  else
-                    // There should be at least one output for a stateless
-                    // computation.
-                    Fail()
-                    EmptyRouter
-                  end
-
                 /////////
                 // Create n steps given a parallelism of n. Then use these
                 // to create a StatelessPartitionRouter.
-                let router_stateless_steps_iso = recover iso Array[Step] end
-                let router_stateless_step_ids_iso =
-                  recover iso MapIs[Step, RoutingId] end
-                for r_id in execution_ids.values() do
-                  let next_step = builder(r_id, _worker_name, out_router,
-                    _metrics_conn, _event_log, _recovery_replayer, _auth,
-                    _outgoing_boundaries, _router_registry)
-
-                  router_stateless_steps_iso.push(next_step)
-                  router_stateless_step_ids_iso(next_step) = r_id
-                  data_routes(r_id) = next_step
-                  _initializables.set(next_step)
-
-                  // If our outputs are going to be routed through a
-                  // StatelessPartitionRouter, then we need to subscribe to
-                  // updates to that router.
-                  // ASSUMPTION: If an out_router is a MultiRouter, then none
-                  // of its subrouters are partition routers. Put differently,
-                  // we assume that splits never include partition routers.
-                  match out_router
-                  | let pr: StatelessPartitionRouter =>
-                    _router_registry
-                      .register_stateless_partition_router_subscriber(
-                        pr.partition_routing_id(), next_step)
-                  end
-                end
+                let step_group = create_step_group(execution_ids,
+                  builder, out_router)
 
                 // Now that we've built all the individual local steps in this
                 // group, we need to record that we built this group and
                 // then create the StatelessPartitionRouter that routes
                 // messages to it.
+                let router_stateless_steps_iso = recover iso Array[Step] end
+                let router_stateless_step_ids_iso =
+                  recover iso MapIs[Step, RoutingId] end
+                for (r_id, next_step) in step_group.pairs() do
+                  router_stateless_steps_iso.push(next_step)
+                  router_stateless_step_ids_iso(next_step) = r_id
+                  data_routes(r_id) = next_step
+                  _initializables.set(next_step)
+                end
                 let router_stateless_steps =
                   consume val router_stateless_steps_iso
                 let router_stateless_step_ids =
@@ -1176,6 +1200,11 @@ actor LocalTopologyInitializer is LayoutInitializer
                 built_stateless_steps(partition_routing_id) =
                   router_stateless_steps
 
+                // Create proxies to other workers involved in this
+                // stateless computation step group.
+                // TODO: Currently, we simply include all workers in the
+                // cluster, but eventually we will need a more intelligent
+                // layout.
                 let proxies = recover iso Map[WorkerName, ProxyRouter] end
                 for (w, ob) in _outgoing_boundaries.pairs() do
                   let w_routing_id =
@@ -1187,8 +1216,6 @@ actor LocalTopologyInitializer is LayoutInitializer
                   proxies(w) = proxy_router
                 end
 
-                // !@ Where do we get proxies from? Probably we update the code
-                // so we just pass in boundaries.
                 let next_router = StatelessPartitionRouter(
                   partition_routing_id, _worker_name, t.worker_names,
                   router_stateless_steps, router_stateless_step_ids,
@@ -1409,6 +1436,36 @@ actor LocalTopologyInitializer is LayoutInitializer
     // else
     //   Fail()
     // end
+
+  fun create_step_group(routing_ids: SetIs[RoutingId] box,
+    builder: StepBuilder, output_router: Router): Map[RoutingId, Step]
+  =>
+    let steps = Map[RoutingId, Step]
+    for r_id in routing_ids.values() do
+      let next_step = builder(r_id, _worker_name, output_router,
+        _metrics_conn, _event_log, _recovery_replayer, _auth,
+        _outgoing_boundaries, _router_registry)
+
+      steps(r_id) = next_step
+
+      // If our outputs are going to be routed through a
+      // StatePartitionRouter or StatelessPartitionRouter, then we
+      // need to subscribe to updates to that router.
+      // ASSUMPTION: If an out_router is a MultiRouter, then none
+      // of its subrouters are partition routers. Put differently,
+      // we assume that splits never include partition routers.
+      match output_router
+      | let pr: StatePartitionRouter =>
+        _router_registry
+          .register_partition_router_subscriber(pr.state_name(),
+            next_step)
+      | let pr: StatelessPartitionRouter =>
+        _router_registry
+          .register_stateless_partition_router_subscriber(
+            pr.partition_routing_id(), next_step)
+      end
+    end
+    steps
 
   //!@ What should happen here?
   be receive_immigrant_key(msg: KeyMigrationMsg) =>

@@ -189,7 +189,7 @@ class Pipeline[Out: Any val] is BasicPipeline
       Pipeline[Out](_pipeline_id, _name, _stages, _dag_sink_ids)
     end
 
-  fun ref group_by_key(pf: PartitionFunction[Out]): Pipeline[Out] =>
+  fun ref group_by_key(pf: KeyExtractor[Out]): Pipeline[Out] =>
     if not _finished then
       let node_id = _stages.add_node(TypedGroupByKey[Out](pf))
       try
