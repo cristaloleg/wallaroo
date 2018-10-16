@@ -35,7 +35,7 @@ use "wallaroo_labs/mort"
 use "wallaroo_labs/time"
 
 
-interface Runner
+trait Runner
   // Return a Bool indicating whether the message is finished processing
   // and a U64 indicating the last timestamp for calculating the duration of
   // the computation
@@ -45,9 +45,8 @@ interface Runner
     latest_ts: U64, metrics_id: U16, worker_ingress_ts: U64,
     metrics_reporter: MetricsReporter ref): (Bool, U64)
   fun name(): String
-  fun state_name(): StateName
 
-interface SerializableStateRunner
+trait SerializableStateRunner
   fun ref import_key_state(step: Step ref, s_name: StateName, key: Key,
     s: ByteSeq val)
   fun ref export_key_state(step: Step ref, key: Key): ByteSeq val
@@ -201,7 +200,7 @@ class val StateRunnerBuilder[In: Any val, Out: Any val, S: State ref] is
   fun parallelism(): USize => _parallelism
   fun is_stateful(): Bool => true
 
-class ComputationRunner[In: Any val, Out: Any val]
+class ComputationRunner[In: Any val, Out: Any val] is Runner
   let _next: Runner
   let _computation: Computation[In, Out] val
   let _computation_name: String
@@ -267,9 +266,7 @@ class ComputationRunner[In: Any val, Out: Any val]
       (true, latest_ts)
     end
 
-
   fun name(): String => _computation.name()
-  fun state_name(): StateName => ""
 
 class StateRunner[In: Any val, Out: Any val, S: State ref] is (Runner &
   RollbackableRunner & SerializableStateRunner)
@@ -379,8 +376,7 @@ class StateRunner[In: Any val, Out: Any val, S: State ref] is (Runner &
     //rotate
     None
 
-  fun name(): String => "State runner"
-  fun state_name(): StateName => _state_name
+  fun name(): String => _state_comp.name()
 
   fun ref import_key_state(step: Step ref, s_name: StateName, key: Key,
     s: ByteSeq val)
@@ -519,7 +515,7 @@ class StateRunner[In: Any val, Out: Any val, S: State ref] is (Runner &
 interface Stringablike
   fun string(): String
 
-class iso RouterRunner
+class iso RouterRunner is Runner
   let _grouper: Grouper
 
   new iso create(g: (Shuffle | GroupByKey | None)) =>
@@ -542,4 +538,3 @@ class iso RouterRunner
       worker_ingress_ts)
 
   fun name(): String => "Router runner"
-  fun state_name(): StateName => ""
