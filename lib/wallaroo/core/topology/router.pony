@@ -125,11 +125,22 @@ class val DirectRouter is Router
   fun hash(): USize =>
     _target_id.hash() xor (digestof _target).hash()
 
+//TODO: Using the MultiRouter with sub-MultiRouters causes compilation to
+//freeze on Reachability, so for now it's banned.
 class val MultiRouter is Router
   let _routers: Array[Router] val
 
   new val create(routers: Array[Router] val) =>
     _routers = routers
+    ifdef debug then
+      for r in _routers.values() do
+        Invariant(
+          match r
+          | let mr: MultiRouter => false
+          else true end
+        )
+      end
+    end
 
   fun route[D: Any val](metric_name: String, pipeline_time_spent: U64, data: D,
     key: Key, producer_id: RoutingId, producer: Producer ref, i_msg_uid: MsgId,
@@ -155,12 +166,21 @@ class val MultiRouter is Router
             z
           end
         end
-      (let is_f, _) = router.route[D](metric_name, pipeline_time_spent, data,
-        key, producer_id, producer,
-        i_msg_uid, o_frac_ids,
-        latest_ts, metrics_id, worker_ingress_ts)
-      // If any of the messages sent downstream are not finished, then
-      // we report that this message is not finished yet.
+      (let is_f, _) =
+        //!@ OFFENDING LINE
+        match router
+        | let dr: DirectRouter =>
+          dr.route[D](metric_name, pipeline_time_spent, data,
+            key, producer_id, producer,
+            i_msg_uid, o_frac_ids,
+            latest_ts, metrics_id, worker_ingress_ts)
+        else
+          Fail()
+          (true, 0)
+        end
+
+      // // If any of the messages sent downstream are not finished, then
+      // // we report that this message is not finished yet.
       if not is_f then is_finished = false end
     end
     (is_finished, latest_ts)
@@ -1071,12 +1091,27 @@ class val StatelessPartitionRouter is Router
           (true, latest_ts)
         end
       else
+        //!@ TODO: We need to simplify this and improve use of ProxyRouters
+        // while avoiding Reachability problem when wrapping ForwardStateless
+        // in Forward
         let msg = ForwardStatelessPartitionMsg[D](_partition_id, _worker_name,
           data, key, metric_name, i_msg_uid, frac_ids)
         let proxy = _proxies(target_worker)?
-        proxy.route[ForwardStatelessPartitionMsg[D]](metric_name,
-          pipeline_time_spent, msg, key, producer_id, producer, i_msg_uid,
-          frac_ids, latest_ts, metrics_id, worker_ingress_ts)
+        let ob = proxy.target_boundary()
+        let might_be_route = producer.route_to(ob)
+        match might_be_route
+        | let r: Route =>
+          r.forward(msg, pipeline_time_spent, producer_id, producer,
+            latest_ts, metrics_id, metric_name, worker_ingress_ts)
+          (false, latest_ts)
+        else
+          Fail()
+          (true, latest_ts)
+        end
+        //!@
+        // EmptyRouter.route[ForwardStatelessPartitionMsg[D]](metric_name,
+        //   pipeline_time_spent, msg, key, producer_id, producer, i_msg_uid,
+        //   frac_ids, latest_ts, metrics_id, worker_ingress_ts)
       end
     else
       @printf[I32]("Can't find route!\n".cstring())

@@ -40,6 +40,8 @@ use "wallaroo/core/metrics"
 use "wallaroo/core/routing"
 use "wallaroo/core/sink/tcp_sink"
 use "wallaroo/core/source"
+//!@
+use "wallaroo/core/source/gen_source"
 use "wallaroo/core/source/barrier_source"
 use "wallaroo/core/topology"
 use "wallaroo_labs/collection_helpers"
@@ -48,6 +50,7 @@ use "wallaroo_labs/equality"
 use "wallaroo_labs/messages"
 use "wallaroo_labs/mort"
 use "wallaroo_labs/queue"
+
 
 class val LocalTopology
   let _app_name: String
@@ -58,15 +61,6 @@ class val LocalTopology
   // A map from node ids in the graph to one or more routing ids per node,
   // depending on the parallelism.
   let _routing_ids: Map[U128, SetIs[RoutingId] val] val
-
-  //!@
-  // let _step_map: Map[RoutingId, (ProxyAddress | RoutingId)] val
-  // // _state_builders maps from state_name to StateSubpartitions
-  // let _state_builders: Map[StateName, StateSubpartitions] val
-  // let _pre_state_data: Array[PreStateData] val
-  // let _boundary_ids: Map[WorkerName, RoutingId] val
-  // let state_step_ids: Map[StateName, Array[RoutingId] val] val
-
   let state_routing_ids: Map[StateName, Map[WorkerName, RoutingId] val] val
   let stateless_partition_routing_ids:
     Map[RoutingId, Map[WorkerName, RoutingId] val] val
@@ -79,12 +73,6 @@ class val LocalTopology
   new val create(name': String, worker_name': WorkerName,
     graph': Dag[StepInitializer] val,
     routing_ids': Map[U128, SetIs[RoutingId] val] val,
-    //!@
-    // step_map': Map[RoutingId, (ProxyAddress | RoutingId)] val,
-    // state_builders': Map[StateName, StateSubpartitions] val,
-    // pre_state_data': Array[PreStateData] val,
-    // boundary_ids': Map[WorkerName, RoutingId] val,
-    // state_step_ids': Map[StateName, Array[RoutingId] val] val,
     worker_names': Array[WorkerName] val,
     non_shrinkable': SetIs[WorkerName] val,
     state_routing_ids': Map[StateName, Map[WorkerName, RoutingId] val] val,
@@ -96,71 +84,16 @@ class val LocalTopology
     _worker_name = worker_name'
     _graph = graph'
     _routing_ids = routing_ids'
-    //!@
-    // _step_map = step_map'
-    // _state_builders = state_builders'
-    // _pre_state_data = pre_state_data'
-    // _boundary_ids = boundary_ids'
-    // state_step_ids = state_step_ids'
     worker_names = worker_names'
     non_shrinkable = non_shrinkable'
     state_routing_ids = state_routing_ids'
     stateless_partition_routing_ids = stateless_partition_routing_ids'
     barrier_source_id = barrier_source_id'
 
-  //!@
-  // fun state_builders(): Map[StateName, StateSubpartitions] val =>
-  //   _state_builders
-
   fun routing_ids(): Map[U128, SetIs[RoutingId] val] val =>
     _routing_ids
 
-  fun update_state_map(state_name: StateName,
-    state_map: Map[StateName, Router],
-    metrics_conn: MetricsSink, event_log: EventLog,
-    all_local_keys: Map[StateName, SetIs[Key] val] val,
-    recovery_replayer: RecoveryReconnecter,
-    auth: AmbientAuth,
-    outgoing_boundaries: Map[WorkerName, OutgoingBoundary] val,
-    initializables: Initializables,
-    data_routes: Map[RoutingId, Consumer tag],
-    state_steps: Map[StateName, Array[Step] val],
-    built_state_step_ids: Map[StateName, Map[RoutingId, Step] val],
-    router_registry: RouterRegistry)
-  =>
-    None
-    //!@ Rework this logic
-
-    // let subpartition =
-    //   try
-    //     _state_builders(state_name)?
-    //   else
-    //     @printf[I32](("Tried to update state map with nonexistent state " +
-    //       "name " + state_name + "\n").cstring())
-    //     error
-    //   end
-
-    // if not state_map.contains(state_name) then
-    //   @printf[I32](("----Creating state steps for " + state_name + "----\n")
-    //     .cstring())
-    //   try
-    //     let local_state_routing_ids = state_routing_ids(state_name)?
-    //     state_map(state_name) = subpartition.build(_app_name, _worker_name,
-    //       worker_names, metrics_conn, auth, event_log, all_local_keys,
-    //       recovery_replayer, outgoing_boundaries, initializables, data_routes,
-    //       state_step_ids, state_steps, built_state_step_ids,
-    //       state_routing_ids(state_name)?, router_registry)
-    //   else
-    //     Fail()
-    //   end
-    // end
-
   fun graph(): Dag[StepInitializer] val => _graph
-
-  //!@
-  // fun pre_state_data(): Array[PreStateData] val => _pre_state_data
-
-  // fun step_map(): Map[RoutingId, (ProxyAddress | RoutingId)] val => _step_map
 
   fun name(): String => _app_name
 
@@ -168,9 +101,6 @@ class val LocalTopology
 
   fun is_empty(): Bool =>
     _graph.is_empty()
-
-  //!@
-  // fun boundary_ids(): Map[WorkerName, RoutingId] val => _boundary_ids
 
   fun val add_worker_name(w: WorkerName): LocalTopology =>
     if not worker_names.contains(w) then
@@ -372,7 +302,7 @@ actor LocalTopologyInitializer is LayoutInitializer
     Map[U128, StatelessPartitionRouterBlueprint] val =
       recover Map[U128, StatelessPartitionRouterBlueprint] end
 
-  // Accumulate all TCPSourceListenerBuilders so we can build them
+  // Accumulate all SourceListenerBuilders so we can build them
   // once EventLog signals we're ready
   let sl_builders: Array[SourceListenerBuilder] =
     recover iso Array[SourceListenerBuilder] end
@@ -863,8 +793,6 @@ actor LocalTopologyInitializer is LayoutInitializer
   be initialize(cluster_initializer: (ClusterInitializer | None) = None,
     checkpoint_target: (CheckpointId | None) = None)
   =>
-    @printf[I32]("!@ STARTING WORKER BUT INITIALIZE IS INCOMPLETE\n".cstring())
-
     _recovering =
       match checkpoint_target
       | let id: CheckpointId =>
@@ -908,7 +836,8 @@ actor LocalTopologyInitializer is LayoutInitializer
         if local_topology_file.exists() then
           //we are recovering an existing worker topology
           let data = recover val
-            // TODO: We assume that all journal data is copied to local file system first
+            // TODO: We assume that all journal data is copied to local file
+            // system first
             let file = File(local_topology_file)
             file.read(file.size())
           end
@@ -998,13 +927,12 @@ actor LocalTopologyInitializer is LayoutInitializer
         /////////
         // Initialize based on DAG
         //
-        // Assumptions:
-        //   I. Acylic graph
+        // ASSUMPTION: Acyclic graph
         /////////
 
         let nodes_to_initialize = Array[DagNode[StepInitializer] val]
 
-        /////////
+        //////////////////////////////////////////////////////////////////////
         // 1. Find graph sinks and add to nodes to initialize queue.
         //    We'll work our way backwards.
         //    We use a frontier queue to ensure that we add to the
@@ -1033,14 +961,12 @@ actor LocalTopologyInitializer is LayoutInitializer
           end
         end
 
-        /////////
-        // 2. Loop: Check next node to initialize for if all outgoing steps
-        //          have been created.
-        //       if no, send to end of nodes to initialize queue.
-        //       if yes, add ins to nodes to initialize queue, then build the
-        //         step (connecting it to its out steps, which have already
-        //         been built)
-        // If there are no cycles (I), this will terminate
+        //////////////////////////////////////////////////////////////////////
+        // 2. Loop: Get next node from nodes to initialize queue, and check if
+        //          all its outputs have been created yet.
+        //       if no, send to that node to end of nodes to initialize queue.
+        //       if yes, build the actor (connecting it to its output actors, //         which have already been built)
+        // If there are no cycles (as per our assumption), this will terminate
         while nodes_to_initialize.size() > 0 do
           let next_node =
             try
@@ -1066,7 +992,8 @@ actor LocalTopologyInitializer is LayoutInitializer
 
             let next_initializer: StepInitializer = next_node.value
 
-            // ...match kind of initializer and go from there...
+            ///////////////////////////////////////////////////////////////////
+            // Determine if the next initializer is for a step, sink, or source
             match next_initializer
             | let builder: StepBuilder =>
             ///////////////
@@ -1330,11 +1257,15 @@ actor LocalTopologyInitializer is LayoutInitializer
                 " pipeline with " + source_data.name() + "----\n").cstring())
 
               // Set up SourceListener builders
-              sl_builders.push(source_data.source_listener_builder_builder()(
-                t.worker_name(), pipeline_name, source_data.runner_builder(),
-                out_router, _metrics_conn, consume source_reporter,
-                _router_registry, _outgoing_boundary_builders, _event_log,
-                _auth, this, _recovering))
+              let source_runner_builder = source_data.runner_builder()
+              let sl_builder_builder =
+                source_data.source_listener_builder_builder()
+              let sl_builder = sl_builder_builder(_worker_name, pipeline_name,
+                source_runner_builder, out_router, _metrics_conn,
+                consume source_reporter, _router_registry,
+                _outgoing_boundary_builders, _event_log, _auth, this,
+                _recovering)
+              sl_builders.push(sl_builder)
 
               // Nothing connects to a source via an in edge locally,
               // so this just marks that we've built this one
@@ -1346,6 +1277,10 @@ actor LocalTopologyInitializer is LayoutInitializer
             nodes_to_initialize.push(next_node)
           end
         end
+
+        //////////////////////////////////////////////////////////////////////
+        // 3. Create DataRouter, register components with RouterRegistry,
+        //    and initiate final initialization Phases.
 
         ////////////////////////////////////////////
         // Set up the DataRouter for this worker
@@ -1458,8 +1393,8 @@ actor LocalTopologyInitializer is LayoutInitializer
       @printf[I32]("Error initializing topology!\n".cstring())
       Fail()
     end
-//!@!@
 
+//!@!@
   fun ref _initialize_joining_worker() =>
     @printf[I32]("!@ STARTING JOINING WORKER BUT INITIALIZE IS COMMENTED OUT\n".cstring())
 
