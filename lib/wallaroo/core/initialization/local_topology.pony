@@ -982,7 +982,12 @@ actor LocalTopologyInitializer is LayoutInitializer
         // Keep track of state and stateless steps for registration with
         // DataRouters.
         let built_state_steps = Map[StateName, Array[Step] val]
-        let built_stateless_steps = Map[RoutingId, Array[Step] box]
+        let built_stateless_steps = Map[RoutingId, Array[Step] val]
+
+        // Keep track of partition routers
+        let state_partition_routers = Map[StateName, StatePartitionRouter]
+        let stateless_partition_routers =
+          Map[RoutingId, StatelessPartitionRouter]
 
         // If this worker has at least one Source, then we'll also need a
         // a BarrierSource to ensure that checkpoint barriers always get to
@@ -1165,6 +1170,7 @@ actor LocalTopologyInitializer is LayoutInitializer
                   consume proxies, HashPartitions(t.worker_names),
                   t.state_routing_ids(state_name)?)
 
+                state_partition_routers(state_name) = next_router
                 built_routers(node_id) = next_router
               else
                 //////////////////////////////////
@@ -1227,6 +1233,7 @@ actor LocalTopologyInitializer is LayoutInitializer
                   t.stateless_partition_routing_ids(partition_routing_id)?,
                   consume proxies, execution_ids.size())
 
+                stateless_partition_routers(partition_routing_id) = next_router
                 built_routers(node_id) = next_router
               end
             | let egress_builder: EgressBuilder =>
@@ -1340,15 +1347,113 @@ actor LocalTopologyInitializer is LayoutInitializer
           end
         end
 
+        ////////////////////////////////////////////
+        // Set up the DataRouter for this worker
+        for (_, steps) in built_state_steps.pairs() do
+          for s in steps.values() do
+            _router_registry.register_producer(s)
+          end
+        end
+        for (_, steps) in built_stateless_steps.pairs() do
+          for s in steps.values() do
+            _router_registry.register_producer(s)
+          end
+        end
 
-////
-// !@ More initializing...
-////
+        let sendable_data_routes = consume val data_routes
 
+        let state_steps_iso = recover iso Map[StateName, Array[Step] val] end
+        for (k, v) in built_state_steps.pairs() do
+          state_steps_iso(k) = v
+        end
+        let sendable_state_steps = consume val state_steps_iso
 
-      //!@ Here ends the _topology match
+        let stateless_steps_iso =
+          recover iso Map[RoutingId, Array[Step] val] end
+        for (k, v) in built_stateless_steps.pairs() do
+          stateless_steps_iso(k) = v
+        end
+        let sendable_stateless_steps = consume val stateless_steps_iso
+
+        let data_router_state_routing_ids =
+          recover iso Map[RoutingId, StateName] end
+        for (s_name, ws) in t.state_routing_ids.pairs() do
+          for (w, r_id) in ws.pairs() do
+            if w == _worker_name then
+              data_router_state_routing_ids(r_id) = s_name
+            end
+          end
+        end
+
+        let data_router_stateless_routing_ids =
+          recover iso Map[RoutingId, RoutingId] end
+        for (sr_id, ws) in t.stateless_partition_routing_ids.pairs() do
+          for (w, r_id) in ws.pairs() do
+            if w == _worker_name then
+              data_router_stateless_routing_ids(r_id) = sr_id
+            end
+          end
+        end
+
+        let data_router = DataRouter(_worker_name, sendable_data_routes,
+          sendable_state_steps, sendable_stateless_steps,
+          consume data_router_state_routing_ids,
+          consume data_router_stateless_routing_ids)
+        _router_registry.set_data_router(data_router)
+        _data_receivers.update_data_router(data_router)
+
+        ////////////////////////////
+        // For non-initializers, inform the initializer that we're done
+        // initializing our local topology. If this is the initializer worker,
+        // we'll inform our ClusterInitializer actor once we've spun up the
+        // source listeners.
+        if not _is_initializer then
+          let topology_ready_msg =
+            try
+              ChannelMsgEncoder.topology_ready(_worker_name, _auth)?
+            else
+              @printf[I32]("ChannelMsgEncoder failed\n".cstring())
+              error
+            end
+
+          if not _recovering then
+            _connections.send_control("initializer", topology_ready_msg)
+          end
+        end
+
+        //////////////////////////////////////////////////////////////////
+        // Register boundaries and partition routers with RouterRegistry
+        _router_registry.register_boundaries(_outgoing_boundaries,
+          _outgoing_boundary_builders)
+
+        for (s_name, pr) in state_partition_routers.pairs() do
+          _router_registry.set_state_partition_router(s_name, pr)
+        end
+
+        for (id, pr) in stateless_partition_routers.pairs() do
+          _router_registry.set_stateless_partition_router(id, pr)
+        end
+
+        /////////////////////////////////////////
+        // Kick off final initialization Phases
+        _initializables.application_begin_reporting(this)
+
+        @printf[I32]("Local topology initialized\n".cstring())
+        _topology_initialized = true
+
+        if _initializables.size() == 0 then
+          @printf[I32](("Phases I-II skipped (this topology must only have " +
+            "sources.)\n").cstring())
+          _application_ready_to_work()
+        end
+      else
+        @printf[I32](("Local Topology Initializer: No local topology to " +
+          "initialize\n").cstring())
       end
-    //!@ Here ends the initialization outer try block
+
+      @printf[I32]("\n|^|^|^|Finished Initializing Local Topology|^|^|^|\n"
+        .cstring())
+      @printf[I32]("---------------------------------------------------------\n".cstring())
     else
       @printf[I32]("Error initializing topology!\n".cstring())
       Fail()
