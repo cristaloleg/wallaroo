@@ -102,7 +102,7 @@ actor RouterRegistry
   //
   ////////////////
 
-  let _producers: Map[RoutingId, Producer] = _producers.create()
+  let _producers: SetIs[Producer] = _producers.create()
   let _sources: Map[RoutingId, Source] = _sources.create()
   let _source_listeners: SetIs[SourceListener] = _source_listeners.create()
   // Map from Source digestof value to source id
@@ -238,7 +238,9 @@ actor RouterRegistry
     _data_router = dr
     _distribute_data_router()
 
-  be set_partition_router(state_name: StateName, pr: StatePartitionRouter) =>
+  be set_state_partition_router(state_name: StateName,
+    pr: StatePartitionRouter)
+  =>
     _partition_routers(state_name) = pr
     if not _local_keys.contains(state_name) then
       _local_keys(state_name) = SetIs[Key]
@@ -262,7 +264,7 @@ actor RouterRegistry
     _connections.register_disposable(d)
 
   be register_source(source: Source, source_id: RoutingId) =>
-    _producers(source_id) = source
+    _producers.set(source)
     _sources(source_id) = source
     _source_ids(digestof source) = source_id
     _barrier_initiator.register_source(source, source_id)
@@ -275,7 +277,7 @@ actor RouterRegistry
 
   be unregister_source(source: Source, source_id: RoutingId) =>
     try
-      _unregister_producer(source_id)
+      _unregister_producer(source)
       _sources.remove(source_id)?
       _source_ids.remove(digestof source)?
       _barrier_initiator.unregister_source(source, source_id)
@@ -496,26 +498,20 @@ actor RouterRegistry
       Fail()
     end
 
-  be register_producer(id: RoutingId, p: Producer) =>
-    _producers(id) = p
+  be register_producer(p: Producer) =>
+    _producers.set(p)
 
-  be unregister_producer(id: RoutingId) =>
-    _unregister_producer(id)
+  be unregister_producer(p: Producer) =>
+    _unregister_producer(p)
 
-  fun ref _unregister_producer(id: RoutingId) =>
-    try
-      _producers.remove(id)?
-    else
-      ifdef debug then
-        @printf[I32]("RouterRegistry: Trying to remove unknown producer.\n"
-          .cstring())
-      end
-    end
+  fun ref _unregister_producer(p: Producer) =>
+    _producers.unset(p)
 
   fun _distribute_data_router() =>
     _data_receivers.update_data_router(_data_router)
 
-  fun ref _distribute_partition_router(partition_router: StatePartitionRouter) =>
+  fun ref _distribute_partition_router(partition_router: StatePartitionRouter)
+  =>
     let state_name = partition_router.state_name()
 
     try
