@@ -135,6 +135,7 @@ actor ApplicationDistributor is Distributor
       while frontier.size() > 0 do
         let next_id = frontier.pop()?
         let node = logical_graph.get_node(next_id)?
+        if processed.contains(node.id) then continue end
         match node.value
         | let rb: RunnerBuilder =>
           let grouper =
@@ -143,6 +144,13 @@ actor ApplicationDistributor is Distributor
             else
               None
             end
+
+          // !@ TODO: If this is not stateful, keep going back a node, check
+          // if it is not stateful and has only one output, then continue building a list of
+          // runner builders (adding each node to processed) until we come to
+          // the earliest one in the sequence. Then use this node's output and
+          // the earliest one's input. Pass the sequence builder into the
+          // StepBuilder and continue as normal.
           let s_builder = StepBuilder(_app_name, _app_name, rb,
             node.id, rb.routing_group(), grouper, rb.is_stateful())
           interm_graph.add_node(s_builder, node.id)
