@@ -33,6 +33,11 @@ CMD_PYTHON3 = 'machida3 --application-module multi_partition_detector --depth 1'
 
 APIS = {'pony': CMD_PONY, 'python': CMD_PYTHON, 'python3': CMD_PYTHON3}
 
+# If resilience is on, add --run-with-resilience to commands
+import os
+if os.environ.get("resilience") == 'on':
+    for a in APIS:
+        APIS[a] += ' --run-with-resilience'
 
 ##############
 # Test spec(s)
