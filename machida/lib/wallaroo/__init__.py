@@ -50,9 +50,142 @@ def serialize(o):
 def deserialize(bs):
     return pickle.loads(bs)
 
-
 class WallarooParameterError(Exception):
     pass
+
+def source(name, source_config):
+    Pipeline(name, source_config)
+
+def build_application(app_name, pipeline):
+    pipeline.validate_actions()
+    return (app_name, pipeline._actions)
+
+class Pipeline(object):
+    def __init__(self, name, source_config):
+        self._connectors = {}
+        self._next_source_connector_port = 7100
+        self._next_sink_connector_port = 7200
+        self._actions = [("name", name)]
+
+        if isinstance(source_config, str):
+            (port, decoder) = self._connectors[source_config]
+            connector = wallaroo.experimental.SourceConnectorConfig(host='localhost', port=port, decoder=decoder)
+            self._actions.append(("source", name, connector.to_tuple()))
+        else:
+            self._actions.append(("source", name, source_config.to_tuple()))
+        return self
+
+    ## !@ They treat connectors differently for some reason. How do we roll that
+    ##    into the wallaroo.source() call?
+
+    def to(self, computation):
+        self._actions.append(("to", computation))
+        return self
+
+    def to_sink(self, sink_config):
+        if isinstance(sink_config, str):
+            (port, encoder) = self._connectors[sink_config]
+            connector = wallaroo.experimental.SinkConnectorConfig(host='localhost', port=port, encoder=encoder)
+            self._actions.append(("to_sink", connector.to_tuple()))
+        else:
+            self._actions.append(("to_sink", sink_config.to_tuple()))
+        return self
+
+    def to_sinks(self, sink_configs):
+        sinks = []
+        for sc in sink_configs:
+            if isinstance(sc, str):
+                (port, encoder) = self._connectors[sc]
+                connector = wallaroo.experimental.SinkConnectorConfig(host='localhost', port=port, encoder=encoder)
+                sinks.append(connector.to_tuple())
+            else:
+                sinks.append(sc.to_tuple())
+        self._actions.append(("to_sinks", sinks))
+        return self
+
+    def _validate_actions(self):
+        self._steps = {}
+        self._pipelines = {}
+        self._states = {}
+        last_action = None
+        has_sink = False
+        # Ensure that we don't add steps unless we are in an unclosed pipeline
+        expect_steps = False
+
+        for action in self._actions:
+            if action[0][0:2] == "to" and not expect_steps:
+                if last_action == "to_sink":
+                    raise WallarooParameterError(
+                        "Unable to add a computation step after a sink. "
+                        "Please declare a new pipeline first.")
+                else:
+                    raise WallarooParameterError(
+                        "Please declare a new pipeline before adding "
+                        "computation steps.")
+
+            if action[0] == "new_pipeline":
+                self._validate_unique_pipeline_name(action[1], action[2])
+                expect_steps = True
+            elif action[0] == "to_state_partition":
+                self._validate_state(action[2], action[3], action[5])
+                self._validate_unique_partition_labels(action[5])
+                self._validate_partition_function(action[4])
+            elif action[0] == "to_stateful":
+                self._validate_state(action[2], action[3])
+            elif action[0] == "to_sink":
+                has_sink = True
+                expect_steps = False
+
+            last_action = action[0]
+
+        # After checking all of our actions, we should have seen at least one
+        # pipeline terminated with a sink.
+        if not has_sink:
+            raise WallarooParameterError(
+                "At least one pipeline must define a sink")
+
+    def _validate_unique_pipeline_name(self, pipeline, source_config):
+        if pipeline in self._pipelines:
+            raise WallarooParameterError((
+                "A computation named {0} is defined more than once. "
+                "Please use unique names for your steps."
+                ).format(repr(computation.name)))
+        else:
+            self._pipelines[pipeline] = source_config
+
+    def _validate_state(self, ctor, name, partitions = None):
+        if name in self._states:
+            (other_ctor, other_partitions) = self._states[name]
+            if other_ctor.state_cls != ctor.state_cls:
+                raise WallarooParameterError((
+                    "A state with the name {0} has already been defined with "
+                    "an different type {1}, instead of {2}."
+                    ).format(repr(name), other_ctor.state_cls, ctor.state_cls))
+            if other_partitions != partitions:
+                raise WallarooParameterError((
+                    "A state with the name {0} has already been defined with "
+                    "an different paritioning scheme {1}, instead of {2}."
+                    ).format(repr(name), repr(other_partitions), repr(partitions)))
+        else:
+            self._states[name] = (ctor, partitions)
+
+    def _validate_unique_partition_labels(self, partitions):
+        if type(partitions) != list:
+            raise WallarooParameterError(
+                "Partitions lists should be of type list. Got a {0} instead."
+                .format(type(partitions)))
+        if len(set(partitions)) != len(partitions):
+            raise WallarooParameterError(
+                "Partition labels should be uniquely identified via equality "
+                "and support hashing. You might have duplicates or objects "
+                "which can't be used as keys in a dict.")
+
+    def _validate_partition_function(self, partition_function):
+        if not getattr(partition_function, "partition", None):
+            raise WallarooParameterError(
+                "Partition function is missing partition method. "
+                "Did you forget to use the @wallaroo.partition_function "
+                "decorator?")
 
 
 class ApplicationBuilder(object):
