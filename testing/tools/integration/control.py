@@ -35,6 +35,10 @@ class WaitForClusterToResumeProcessing(StoppableThread):
         self.runners = runners
         self.timeout = timeout
         self.interval = interval
+        logging.log(5, "{}(runners={!r} ,timeout={}, interval={})".format(
+            runners=self.runners,
+            timeout=self.timeout,
+            interval=self.interval))
 
     def run(self):
         waiting = set()
@@ -44,23 +48,28 @@ class WaitForClusterToResumeProcessing(StoppableThread):
             obs = ObservabilityNotifier(cluster_status_query,
                 r.external,
                 tests=is_processing, timeout=self.timeout)
-            waiting.add(obs)
+            waiting.add((r.name, obs))
+            logging.log(5, "Adding observability notifier for "
+                        "'ready_to_process' for {!r}".format(
+                        r.name))
             obs.start()
         # Cycle through waiting until its empty or error
         t0 = time.time()
         while not self.stopped():
-            for obs in list(waiting):
+            for name, obs in list(waiting):
                 # short join
                 obs.join(self.interval)
                 if obs.error:
+                    logging.log(5, "ObservabilityQuery failed for {}:\n{}"
+                                .format(name, obs.error))
                     self.stop(obs.error)
                     break
                 if obs.is_alive():
                     continue
                 else:
-                    logging.log(1, "ObservabilityNotifier completed: {}"
-                        .format(obs))
-                    waiting.remove(obs)
+                    logging.log(5, "ObservabilityNotifier for {} completed: {}"
+                        .format(name, obs))
+                    waiting.remove((name, obs))
             # check completion
             if waiting:
                 # check timeout!

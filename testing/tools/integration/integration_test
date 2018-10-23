@@ -314,6 +314,7 @@ class SinkAwaitAction(argparse.Action):
 
 LOG_LEVELS = {'none': 0,
               '1': 1,
+              '5': 5,
               'debug': 10,
               'info': 20,
               'warn': 30,
@@ -472,8 +473,8 @@ def CLI():
     log_group.add_argument('--log-file', help=("Save integration test output"
                            " to file."), action=SetLogFile)
     log_group.add_argument('--log-level', help=("Set the logging level."),
-                           choices=['none', '1', 'debug', 'info', 'warning',
-                                    'error', 'critical'],
+                           choices=['none', '1', '5', 'debug', 'info',
+                                    'warning', 'error', 'critical'],
                            default='info')
 
     term_group = parser.add_argument_group('Termination')
