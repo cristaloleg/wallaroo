@@ -280,8 +280,6 @@ actor ApplicationDistributor is Distributor
           for i_node in node.ins() do
             // !@ Does this check make sense, or should we override sometimes?
             if not groupers.contains(i_node.id) then
-              @printf[I32]("!@ Assigning found grouper to input %s of node %s\n".cstring(), i_node.id.string().cstring(), node.id.string().cstring())
-
               groupers(i_node.id) = input_grouper
             end
 
@@ -307,7 +305,6 @@ actor ApplicationDistributor is Distributor
           end
         | let gbk: GroupByKey =>
           for i_node in node.ins() do
-            @printf[I32]("!@ Assigning GroupByKey to input %s of node %s\n".cstring(), i_node.id.string().cstring(), node.id.string().cstring())
             groupers(i_node.id) = gbk
 
             // Reroute inputs to our outputs.
@@ -330,19 +327,15 @@ actor ApplicationDistributor is Distributor
         | let sc_wrapper: SourceConfigWrapper =>
           let source_name = sc_wrapper.name()
           let sc = sc_wrapper.source_config()
-          @printf[I32]("!@ Source %s looking up grouper\n".cstring(), node.id.string().cstring())
           let grouper =
             if groupers.contains(node.id) then
-              @printf[I32]("!@ -- Found grouper\n".cstring())
               groupers(node.id)?
             else
-              @printf[I32]("!@ -- Found NO grouper\n".cstring())
               OneToOneGroup
             end
 
           let r_builder = RunnerSequenceBuilder(
             recover Array[RunnerBuilder] end where parallelism' = 0)
-          @printf[I32]("!@ About to create SourceData\n".cstring())
           let source_data = SourceData(node.id, source_name, r_builder,
             sc.source_listener_builder_builder(), grouper)
 
