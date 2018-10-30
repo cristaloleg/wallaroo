@@ -72,8 +72,10 @@ extern PyObject *get_list_item(PyObject *list, size_t idx)
 
 extern char *get_stage_command(PyObject *item)
 {
+  printf("!@ get_stage_command");
   PyObject *command = PyTuple_GetItem(item, 0);
   char * rtn = PyBytes_AsString(command);
+  printf("!@ get_stage_command:got string");
   Py_DECREF(command);
   return rtn;
 }
