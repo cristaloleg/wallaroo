@@ -40,7 +40,8 @@ TOPOLOGY_TESTS_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 include $(rules_mk_path)
 
 
-build-testing-correctness-tests-topology: build-machida
+build-testing-correctness-tests-topology: build-pywallaroo
+# build-testing-correctness-tests-topology: build-machida
 #!@
 # build-testing-correctness-tests-topology: build-machida3
 unit-tests-testing-correctness-tests-topology: topology_python_unit_tests

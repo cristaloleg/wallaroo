@@ -174,9 +174,12 @@ def remove_key_by_chains(steps):
     return res
 
 # Create tests!
-APIS = {'python': {'cmd': 'machida --application-module app_gen',
+APIS = {'python': {'cmd': 'pywallaroo --application-module app_gen',
                    'validation_cmd': 'python2 app_gen.py'},
        }
+# APIS = {'python': {'cmd': 'machida --application-module app_gen',
+#                    'validation_cmd': 'python2 app_gen.py'},
+#        }
        #!@
        #  'python3': {'cmd': 'machida3 --application-module app_gen',
        #              'validation_cmd': 'python3 app_gen.py'},

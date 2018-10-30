@@ -45,6 +45,7 @@ integration_path := $(wallaroo_path)/testing/tools
 integration_bin_path := $(integration_path)
 wallaroo_lib :=  $(wallaroo_path)/lib
 wallaroo_python_path := $(wallaroo_path)/machida/lib
+py_wallaroo_bin_path := $(wallaroo_path)/py_wallaroo/build
 machida_bin_path := $(wallaroo_path)/machida/build
 machida3_bin_path := $(wallaroo_path)/machida3/build
 external_sender_bin_path := $(integration_path)/external_sender
@@ -57,7 +58,7 @@ FIXED_PYTHONPATH := .:$(integration_path):$(wallaroo_python_path)
 export PYTHONPATH = $(ORIGINAL_PYTHONPATH):$(FIXED_PYTHONPATH):$(subst :$(SPACE),:,$(subst $(SPACE):,:,$(strip $(CUSTOM_PYTHONPATH))))
 
 ORIGNAL_PATH := $(PATH)
-FIXED_PATH := $(integration_bin_path):$(machida_bin_path):$(machida3_bin_path):$(external_sender_bin_path)
+FIXED_PATH := $(integration_bin_path):$(py_wallaroo_bin_path):$(machida_bin_path):$(machida3_bin_path):$(external_sender_bin_path)
 export PATH = $(ORIGNAL_PATH):$(FIXED_PATH):$(subst :$(SPACE),:,$(subst $(SPACE):,:,$(strip $(CUSTOM_PATH))))
 
 # initialize default for some normal targets and variables
@@ -148,6 +149,8 @@ demo_cluster_spot_pricing ?= true## Whether to use spot pricing or not for demo 
 autoscale ?= on## Build with Autoscale or not
 clustering ?= on## Build with Clustering or not
 resilience ?= off## Build with Resilience or not
+python2 ?= off## Build for Python 2 or not
+python3 ?= off## Build for Python 3 or not
 PONYCC ?= ponyc## Path to ponyc executable
 PONYSTABLE ?= stable## Path to pony stable executable
 target_cpu ?= ## Target CPU to generate binary for
@@ -181,6 +184,24 @@ endif
 
 ifeq ($(resilience),on)
   resilience_arg := -D resilience
+endif
+
+# validation of variable
+ifdef python2
+  $(eval $(call check-values,python2,on off))
+endif
+
+ifeq ($(python2),on)
+  python2_arg := -D python2
+endif
+
+# validation of variable
+ifdef python3
+  $(eval $(call check-values,python3,on off))
+endif
+
+ifeq ($(python3),on)
+  python3_arg := -D python3
 endif
 
 # validation of variable
@@ -268,10 +289,12 @@ define PONYC
     $(if $(filter $(ponyc_docker_args),docker),$(quote))
   $(QUIET)cd $(1) && $(ponyc_docker_args) $(PONYSTABLE) env $(PONYCC) $(ponyc_arch_args) \
     $(debug_arg) $(spike_arg) $(trace_arg) $(autoscale_arg) $(clustering_arg) $(resilience_arg) \
+    $(python2_arg) $(python3_arg) \
     $(PONYCFLAGS) $(EXTRA_PONYCFLAGS) $(target_cpu_arg) --features=-avx512f . $(if $(filter $(ponyc_docker_args),docker),$(quote))
   $(QUIET)cd $(1) && echo "$@: $(wildcard $(abspath $(1))/bundle.json)" | tr '\n' ' ' > $(notdir $(abspath $(1:%/=%))).d
   $(QUIET)cd $(1) && $(ponyc_docker_args) $(PONYSTABLE) env $(PONYCC) $(ponyc_arch_args) \
     $(debug_arg) $(spike_arg) $(trace_arg) $(autoscale_arg) $(clustering_arg) $(resilience_arg) \
+    $(python2_arg) $(python3_arg) \
     $(PONYCFLAGS) $(EXTRA_PONYCFLAGS) $(target_cpu_arg) --features=-avx512f . --pass import --files $(if $(filter \
     $(ponyc_docker_args),docker),$(quote)) 2>/dev/null | grep -o "$(abs_wallaroo_dir).*.pony" \
     | awk 'BEGIN { a="" } {a=a$$1":\n"; printf "%s ",$$1} END {print "\n"a}' \
