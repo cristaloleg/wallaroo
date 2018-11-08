@@ -16,40 +16,53 @@ $(abspath $(lastword $(MAKEFILE_LIST)))_UNIT_TEST_COMMAND := false
 
 # `true`/`false` to enable/disable generate pony related targets (build/test/clean) for pony sources in this directory
 # otherwise targets only get created if there are pony sources (*.pony) in this directory.
-$(abspath $(lastword $(MAKEFILE_LIST)))_PONY_TARGET := true
+$(abspath $(lastword $(MAKEFILE_LIST)))_PONY_TARGET := false
 
 # `true`/`false` to enable/disable generate final file build target using ponyc command for the pony build target so
 # it can be overridden manually
-$(abspath $(lastword $(MAKEFILE_LIST)))_PONYC_TARGET := true
+$(abspath $(lastword $(MAKEFILE_LIST)))_PONYC_TARGET := false
 
 # `true`/`false` to enable/disable generate exs related targets (build/test/clean) for elixir sources in this directory
 # otherwise targets only get created if there are elixir sources (*.exs) in this directory.
-$(abspath $(lastword $(MAKEFILE_LIST)))_EXS_TARGET := true
+$(abspath $(lastword $(MAKEFILE_LIST)))_EXS_TARGET := false
 
 # `true`/`false` to enable/disable generate docker related targets (build/push) for a Dockerfile in this directory
 # otherwise targets only get created if there is a Dockerfile in this directory
-$(abspath $(lastword $(MAKEFILE_LIST)))_DOCKER_TARGET := true
+$(abspath $(lastword $(MAKEFILE_LIST)))_DOCKER_TARGET := false
 
 # `true`/`false` to enable/disable recursing into Makefiles of subdirectories if they exist
 # (and by recursion every makefile in the tree that is referenced)
-$(abspath $(lastword $(MAKEFILE_LIST)))_RECURSE_SUBMAKEFILES := true
+$(abspath $(lastword $(MAKEFILE_LIST)))_RECURSE_SUBMAKEFILES := false
 
 
-CELSIUS_PONY_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+ALERTS_PY_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 # standard rules generation makefile
 include $(rules_mk_path)
 
-integration-tests-examples-pony-celsius: celsius_pony_test
 
-celsius_pony_test:
-	cd $(CELSIUS_PONY_PATH) && \
-	integration_test --framed-file-sender _test.msg \
-	  --validation-cmp \
-	  --expected-file _expected.msg \
+build-examples-python-alerts-stateful: build-machida
+build-examples-python-alerts-stateful: build-machida3
+integration-tests-examples-python-alerts-stateful: build-examples-python-alerts-stateful
+
+integration-tests-examples-python-alerts-stateful: alerts_stateful_py_test
+integration-tests-examples-python-alerts-stateful: alerts_stateful_py3_test
+
+alerts_stateful_py_test:
+	cd $(ALERTS_PY_PATH) && \
+	integration_test --framed-file-sender \
+	  _test.txt --validation-cmp \
+	  --expected-file _expected.txt \
 		--log-level error \
-		--command './celsius $(RUN_WITH_RESILIENCE)' \
-		--sink-expect 100
+		--command 'machida --application-module alerts $(RUN_WITH_RESILIENCE)' \
+		--sink-mode newlines
 
-# end of prevent rules from being evaluated/included multiple times
+alerts_stateful_py3_test:
+	cd $(ALERTS_PY_PATH) && \
+	integration_test --framed-file-sender \
+	  _test.txt --validation-cmp \
+	  --expected-file _expected.txt \
+		--log-level error \
+		--command 'machida3 --application-module alerts $(RUN_WITH_RESILIENCE)' \
+		--sink-mode newlines
 endif

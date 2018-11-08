@@ -35,36 +35,34 @@ $(abspath $(lastword $(MAKEFILE_LIST)))_DOCKER_TARGET := false
 $(abspath $(lastword $(MAKEFILE_LIST)))_RECURSE_SUBMAKEFILES := false
 
 
-CELSIUS_PY_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+ALERTS_PY_PATH := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 # standard rules generation makefile
 include $(rules_mk_path)
 
 
-build-examples-python-celsius: build-machida
-# build-examples-python-celsius: build-machida3
-integration-tests-examples-python-celsius: build-examples-python-celsius
+build-examples-python-alerts-stateless: build-machida
+build-examples-python-alerts-stateless: build-machida3
+integration-tests-examples-python-alerts-stateless: build-examples-python-alerts-stateless
 
-integration-tests-examples-python-celsius: celsius_py_test
-# integration-tests-examples-python-celsius: celsius_py3_test
+integration-tests-examples-python-alerts-stateless: alerts_stateless_py_test
+integration-tests-examples-python-alerts-stateless: alerts_stateless_py3_test
 
-celsius_py_test:
-	cd $(CELSIUS_PY_PATH) && \
+alerts_stateless_py_test:
+	cd $(ALERTS_PY_PATH) && \
 	integration_test --framed-file-sender \
 	  _test.txt --validation-cmp \
 	  --expected-file _expected.txt \
 		--log-level error \
-		--command 'machida --application-module celsius $(RUN_WITH_RESILIENCE)' \
-		--sink-mode newlines \
-		--sink-expect 100
+		--command 'machida --application-module alerts $(RUN_WITH_RESILIENCE)'
+#		--sink-mode newlines
 
-celsius_py3_test:
-	cd $(CELSIUS_PY_PATH) && \
+alerts_stateless_py3_test:
+	cd $(ALERTS_PY_PATH) && \
 	integration_test --framed-file-sender \
 	  _test.txt --validation-cmp \
 	  --expected-file _expected.txt \
 		--log-level error \
-		--command 'machida3 --application-module celsius $(RUN_WITH_RESILIENCE)' \
-		--sink-mode newlines \
-		--sink-expect 100
+		--command 'machida3 --application-module alerts $(RUN_WITH_RESILIENCE)'
+#		--sink-mode newlines
 endif
